@@ -149,6 +149,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0 auto 0 0;
   z-index: 20;
+  border-right: 1px solid var(--border);
   transition: width 0.18s ease;
 }
 
@@ -169,8 +170,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: color-mix(in srgb, var(--page-bg) 86%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .left {
@@ -211,6 +212,11 @@ onBeforeUnmount(() => {
 
 .account-button:hover {
   background: var(--surface-soft);
+}
+
+.account-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .account-name {

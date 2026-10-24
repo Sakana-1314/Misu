@@ -28,8 +28,8 @@ const toneClass: Record<string, string> = {
 
 <style scoped>
 .stat-card {
-  padding: 14px 16px;
-  min-height: 96px;
+  padding: 13px 15px;
+  min-height: 90px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

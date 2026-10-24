@@ -44,7 +44,7 @@ const menuOptions = [
   flex-direction: column;
   height: 100%;
   padding: 14px 10px 12px;
-  background: var(--surface-soft);
+  background: var(--surface);
 }
 
 .side-menu.collapsed {
