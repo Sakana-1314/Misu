@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '代码模板' },
       },
       {
+        path: 'connect',
+        name: 'connect',
+        component: () => import('@/views/ConnectView.vue'),
+        meta: { title: '网页版连接' },
+      },
+      {
         path: 'logs',
         name: 'logs',
         component: () => import('@/views/LogsView.vue'),

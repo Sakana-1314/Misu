@@ -100,6 +100,18 @@ type AuditAsset struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type MPWebSession struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	CookiesEnc   string    `gorm:"type:text" json:"-"`
+	TokenEnc     string    `gorm:"type:text" json:"-"`
+	NickName     string    `gorm:"size:255" json:"nick_name"`
+	Avatar       string    `gorm:"type:text" json:"avatar"`
+	AccountCount int       `json:"account_count"`
+	LastLoginAt  time.Time `json:"last_login_at"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type AuditRecord struct {
 	ID               uint   `gorm:"primaryKey" json:"id"`
 	AuthorizerAppID  string `gorm:"index:idx_audit_app;size:64" json:"authorizer_appid"`
