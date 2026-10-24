@@ -297,6 +297,10 @@ a:hover {
   padding: 2px 0 0;
 }
 
+.n-tabs .n-tabs-nav-scroll-content {
+  border-bottom: none;
+}
+
 .n-tabs .n-tabs-tab {
   padding: 8px 2px;
   margin-right: 22px;

@@ -39,6 +39,7 @@ const themeOverrides: GlobalThemeOverrides = {
     tabTextColorActiveLine: '#172033',
     tabTextColorHoverLine: '#172033',
     tabTextColorLine: '#6b7789',
+    tabBorderColor: 'transparent',
     barColor: '#2563EB',
   },
 }
@@ -56,6 +57,7 @@ const darkOverrides: GlobalThemeOverrides = {
     tabTextColorActiveLine: '#e8edf5',
     tabTextColorHoverLine: '#e8edf5',
     tabTextColorLine: '#98a5b8',
+    tabBorderColor: 'transparent',
   },
 }
 
