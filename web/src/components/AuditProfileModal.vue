@@ -255,7 +255,7 @@ async function save() {
           <div>
             <div class="section-title">审核项</div>
           </div>
-          <n-button secondary type="primary" @click="addItem">添加审核项</n-button>
+          <n-button @click="addItem">添加</n-button>
         </div>
 
         <div class="helper-bar">
@@ -271,14 +271,14 @@ async function save() {
               style="min-width: 280px"
             />
           </div>
-          <n-button quaternary :loading="loadingHelper" @click="loadHelper(referenceAppid)">刷新候选</n-button>
+          <n-button :loading="loadingHelper" @click="loadHelper(referenceAppid)">刷新</n-button>
         </div>
 
         <n-card v-for="(item, index) in form.items" :key="index" size="small" class="item-card" :bordered="true">
           <template #header>
             <div class="item-head">
               <span>审核项 {{ index + 1 }}</span>
-              <n-button text :disabled="form.items.length <= 1" @click="removeItem(index)">移除</n-button>
+              <n-button :disabled="form.items.length <= 1" @click="removeItem(index)">移除</n-button>
             </div>
           </template>
           <div class="grid-2">
@@ -364,7 +364,7 @@ async function save() {
     <template #footer>
       <div class="modal-footer">
         <n-button :disabled="saving" @click="visible = false">取消</n-button>
-        <n-button type="primary" :loading="saving" @click="save">保存配置</n-button>
+        <n-button type="primary" :loading="saving" @click="save">保存</n-button>
       </div>
     </template>
   </n-modal>

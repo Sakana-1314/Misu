@@ -123,13 +123,12 @@ const columns = computed<DataTableColumns<Authorizer>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 90,
+    width: 116,
     fixed: 'right',
     render: (row) =>
       h(
         NButton,
-        { text: true, type: 'primary', onClick: () => router.push(`/authorizers/${row.appid}`) },
-        { default: () => '详情' },
+        { onClick: () => router.push(`/authorizers/${row.appid}`) }, { default: () => '详情' },
       ),
   },
 ])
@@ -209,7 +208,7 @@ const statusOptions = [
       </n-button>
       <n-button type="primary" @click="addShow = true">
         <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增小程序
+        新增
       </n-button>
     </div>
 
@@ -222,20 +221,17 @@ const statusOptions = [
         <div v-if="checkedKeys.length > 0" class="batch-bar">
           <div class="batch-info">已选 {{ checkedKeys.length }} 个</div>
           <div class="batch-actions">
-            <n-button type="primary" @click="openAction('commit')">上传代码</n-button>
-            <n-button type="primary" @click="openAction('submit_audit')">提交审核</n-button>
+            <n-button type="primary" @click="openAction('commit')">上传</n-button>
+            <n-button type="primary" @click="openAction('submit_audit')">提审</n-button>
             <n-dropdown trigger="click" :options="moreOptions" @select="(key: string | number) => openAction(String(key))">
-              <n-button>更多操作</n-button>
+              <n-button>更多</n-button>
             </n-dropdown>
-            <n-button quaternary @click="checkedKeys = []">清除</n-button>
+            <n-button @click="checkedKeys = []">清空</n-button>
           </div>
         </div>
       </transition>
 
-      <div v-if="!loading && items.length === 0 && !keyword && !status" class="surface-card empty-state">
-        <div>暂无小程序</div>
-        <n-button type="primary" style="margin-top: 12px" @click="addShow = true">新增小程序</n-button>
-      </div>
+      <div v-if="!loading && items.length === 0 && !keyword && !status" class="surface-card empty-state">暂无小程序</div>
 
       <n-data-table
         v-else

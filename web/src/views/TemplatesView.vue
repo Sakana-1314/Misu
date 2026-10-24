@@ -47,9 +47,13 @@ async function syncTemplates() {
   }
 }
 
+async function refreshAll() {
+  await Promise.allSettled([loadTemplates(), loadDrafts()])
+}
+
 function addDraft(draft: CodeDraft) {
   dialog.warning({
-    title: '加入模板库',
+    title: '加入',
     content: `确认加入草稿 #${draft.draft_id}？`,
     positiveText: '加入',
     negativeText: '取消',
@@ -57,7 +61,7 @@ function addDraft(draft: CodeDraft) {
       addingDraft.value = draft.draft_id
       try {
         await api.post('/templates/from-draft', { draft_id: draft.draft_id, template_type: 0 })
-        message.success('已加入模板库')
+        message.success('已加入')
         await loadTemplates()
         tab.value = 'templates'
       } finally {
@@ -89,8 +93,8 @@ const templateColumns = computed<DataTableColumns<CodeTemplate>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 90,
-    render: (row) => h(NButton, { text: true, onClick: () => deleteTemplate(row) }, { default: () => '删除' }),
+    width: 116,
+    render: (row) => h(NButton, { onClick: () => deleteTemplate(row) }, { default: () => '删除' }),
   },
 ])
 
@@ -102,12 +106,12 @@ const draftColumns = computed<DataTableColumns<CodeDraft>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 130,
+    width: 116,
     render: (row) =>
       h(
         NButton,
-        { text: true, type: 'primary', loading: addingDraft.value === row.draft_id, onClick: () => addDraft(row) },
-        { default: () => '加入模板库' },
+        { loading: addingDraft.value === row.draft_id, onClick: () => addDraft(row) },
+        { default: () => '加入' },
       ),
   },
 ])
@@ -124,11 +128,11 @@ onMounted(() => {
 <template>
   <div>
     <div class="page-toolbar">
-      <n-button :loading="draftsLoading" @click="loadDrafts">
+      <n-button :loading="loading || draftsLoading" @click="refreshAll">
         <template #icon><n-icon><RefreshOutline /></n-icon></template>
-        刷新草稿
+        刷新
       </n-button>
-      <n-button type="primary" :loading="syncing" @click="syncTemplates">同步模板</n-button>
+      <n-button type="primary" :loading="syncing" @click="syncTemplates">同步</n-button>
     </div>
 
     <div class="surface-card tab-card">

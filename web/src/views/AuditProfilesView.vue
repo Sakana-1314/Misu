@@ -82,11 +82,11 @@ const columns = computed<DataTableColumns<AuditProfile>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 120,
+    width: 216,
     render: (row) =>
       h('div', { class: 'inline-actions' }, [
-        h(NButton, { text: true, type: 'primary', onClick: () => editProfile(row) }, { default: () => '编辑' }),
-        h(NButton, { text: true, onClick: () => deleteProfile(row) }, { default: () => '删除' }),
+        h(NButton, { onClick: () => editProfile(row) }, { default: () => '编辑' }),
+        h(NButton, { onClick: () => deleteProfile(row) }, { default: () => '删除' }),
       ]),
   },
 ])
@@ -101,7 +101,7 @@ const columns = computed<DataTableColumns<AuditProfile>>(() => [
       </n-button>
       <n-button type="primary" @click="createProfile">
         <template #icon><n-icon><AddOutline /></n-icon></template>
-        新建配置
+        新建
       </n-button>
     </div>
 

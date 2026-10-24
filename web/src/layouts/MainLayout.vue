@@ -82,13 +82,13 @@ onBeforeUnmount(() => {
     <div class="main" :class="{ 'is-mobile': isMobile }">
       <header class="topbar">
         <div class="left">
-          <n-button v-if="isMobile" quaternary circle @click="mobileOpen = true">
+          <n-button v-if="isMobile" circle class="icon-button" @click="mobileOpen = true">
             <template #icon><n-icon><MenuOutline /></n-icon></template>
           </n-button>
           <div class="title">{{ pageTitle }}</div>
         </div>
         <div class="right">
-          <n-button quaternary circle :title="themeStore.state.dark ? '切换浅色' : '切换深色'" @click="themeStore.toggle()">
+          <n-button circle class="icon-button" :title="themeStore.state.dark ? '切换浅色' : '切换深色'" @click="themeStore.toggle()">
             <template #icon>
               <n-icon>
                 <SunnyOutline v-if="themeStore.state.dark" />

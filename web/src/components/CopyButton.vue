@@ -30,5 +30,5 @@ async function copy() {
 </script>
 
 <template>
-  <n-button quaternary type="primary" @click="copy">{{ label }}</n-button>
+  <n-button @click="copy">{{ label }}</n-button>
 </template>

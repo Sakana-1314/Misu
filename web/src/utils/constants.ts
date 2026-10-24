@@ -8,19 +8,19 @@ export interface JobTypeOption {
 }
 
 export const jobTypeOptions: JobTypeOption[] = [
-  { value: 'commit', label: '上传代码', description: '将代码模板上传到小程序并生成体验版' },
-  { value: 'submit_audit', label: '提交审核', description: '按审核配置提交代码审核' },
+  { value: 'commit', label: '上传', description: '将代码模板上传到小程序并生成体验版' },
+  { value: 'submit_audit', label: '提审', description: '按审核配置提交代码审核' },
   { value: 'release', label: '发布', description: '发布已通过审核的版本', dangerous: true },
-  { value: 'undo_audit', label: '撤回审核', description: '撤回正在审核的版本', dangerous: true },
-  { value: 'rollback', label: '版本回退', description: '回退到上一版本或指定历史版本', dangerous: true },
-  { value: 'gray_release', label: '分阶段发布', description: '按比例灰度发布新版本', dangerous: true },
+  { value: 'undo_audit', label: '撤回', description: '撤回正在审核的版本', dangerous: true },
+  { value: 'rollback', label: '回退', description: '回退到上一版本或指定历史版本', dangerous: true },
+  { value: 'gray_release', label: '灰度', description: '按比例灰度发布新版本', dangerous: true },
   { value: 'cancel_gray_release', label: '取消灰度', description: '取消当前分阶段发布', dangerous: true },
-  { value: 'modify_domain', label: '配置域名', description: '添加、覆盖或删除小程序服务器域名', dangerous: true },
-  { value: 'bind_tester', label: '绑定体验者', description: '为多个小程序绑定同一个微信号' },
-  { value: 'unbind_tester', label: '解绑体验者', description: '按 userstr 解绑体验者', dangerous: true },
-  { value: 'set_visit_status', label: '服务状态', description: '开启或暂停小程序服务', dangerous: true },
-  { value: 'set_support_version', label: '最低基础库', description: '设置小程序最低基础库版本' },
-  { value: 'preflight', label: '提审预检', description: '批量检查审核状态、隐私接口、类目和域名' },
+  { value: 'modify_domain', label: '域名', description: '添加、覆盖或删除小程序服务器域名', dangerous: true },
+  { value: 'bind_tester', label: '绑定', description: '为多个小程序绑定同一个微信号' },
+  { value: 'unbind_tester', label: '解绑', description: '按 userstr 解绑体验者', dangerous: true },
+  { value: 'set_visit_status', label: '状态', description: '开启或暂停小程序服务', dangerous: true },
+  { value: 'set_support_version', label: '基础库', description: '设置小程序最低基础库版本' },
+  { value: 'preflight', label: '预检', description: '批量检查审核状态、隐私接口、类目和域名' },
 ]
 
 export const jobTypeLabels: Record<string, string> = Object.fromEntries(jobTypeOptions.map((item) => [item.value, item.label]))

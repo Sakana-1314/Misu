@@ -278,3 +278,20 @@ a:hover {
     font-size: 24px;
   }
 }
+
+button.n-button:not(.icon-button):not(.block-button) {
+  width: 88px;
+  min-width: 88px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+button.n-button.icon-button {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+button.n-button.block-button {
+  width: 100%;
+}

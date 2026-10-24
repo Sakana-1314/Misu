@@ -406,7 +406,7 @@ async function submit() {
           :disabled="appids.length === 0 || (requiresConfirm && !confirmed)"
           @click="submit"
         >
-          创建任务
+          提交
         </n-button>
       </div>
     </template>

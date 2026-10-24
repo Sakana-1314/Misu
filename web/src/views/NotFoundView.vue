@@ -11,8 +11,8 @@ const router = useRouter()
       <div class="code">404</div>
       <h1>页面不存在</h1>
       <div class="actions">
-        <n-button type="primary" @click="router.push('/')">返回仪表盘</n-button>
-        <n-button quaternary @click="router.back()">返回上一页</n-button>
+        <n-button type="primary" @click="router.push('/')">首页</n-button>
+        <n-button @click="router.back()">返回</n-button>
       </div>
     </div>
   </div>

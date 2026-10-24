@@ -51,7 +51,7 @@ async function submit() {
             autocomplete="current-password"
           />
         </n-form-item>
-        <n-button type="primary" block attr-type="submit" :loading="loading" style="margin-top: 22px">登录</n-button>
+        <n-button type="primary" block class="block-button" attr-type="submit" :loading="loading" style="margin-top: 22px">登录</n-button>
       </n-form>
     </div>
   </div>
