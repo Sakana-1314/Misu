@@ -80,10 +80,12 @@ const summary = computed(() => {
 
 const templateOptions = computed(() =>
   templates.value.map((template) => ({
-    label: `#${template.template_id} · ${template.user_version}${template.user_desc ? ` · ${template.user_desc}` : ''}`,
-    value: template.template_id,
+    label: `${template.user_version || '未命名版本'}${template.user_desc ? ` · ${template.user_desc}` : ''}`,
+    value: template.id,
   })),
 )
+
+const selectedTemplate = computed(() => templates.value.find((item) => item.id === commitForm.templateId) || null)
 
 const requiresConfirm = computed(() => {
   if (!props.action) return false
@@ -129,7 +131,7 @@ async function init() {
     try {
       const data = await api.get<{ items: CodeTemplate[] }>('/templates')
       templates.value = data.items || []
-      if (templates.value.length > 0) commitForm.templateId = templates.value[0].template_id
+      if (templates.value.length > 0) commitForm.templateId = templates.value[0].id
     } finally {
       loadingOptions.value = false
     }
@@ -165,12 +167,12 @@ function renderedExtJSON(text: string): string {
 function buildPayload(): any {
   switch (props.action) {
     case 'commit': {
-      if (!commitForm.templateId) throw new Error('请选择代码模板')
+      if (!selectedTemplate.value) throw new Error('请选择代码模板')
       if (!commitForm.userVersion.trim()) throw new Error('请填写版本号')
       const ext = commitForm.extJson.trim() || '{}'
       if (!isJSON(renderedExtJSON(ext))) throw new Error('ext_json 不是合法的 JSON')
       return {
-        template_id: commitForm.templateId,
+        template_id: selectedTemplate.value.template_id,
         user_version: commitForm.userVersion.trim(),
         user_desc: commitForm.userDesc.trim(),
         ext_json: ext,

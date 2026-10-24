@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertCircleOutline, CheckmarkCircleOutline, ArrowBackOutline } from '@vicons/ionicons5'
+import { AlertCircleOutline, ArrowForwardOutline, CheckmarkOutline } from '@vicons/ionicons5'
 import { api, ApiError } from '@/api/client'
 import type { Authorizer } from '@/types/api'
 import AppAvatar from '@/components/AppAvatar.vue'
@@ -29,58 +29,77 @@ onMounted(async () => {
   }
 })
 
+const active = computed(() => app.value?.status === 'active')
+
 function goList() {
   router.push('/authorizers')
 }
 
-function goHome() {
-  router.push('/')
+function goDetail() {
+  if (app.value) router.push(`/authorizers/${app.value.appid}`)
 }
 </script>
 
 <template>
   <div class="callback-page">
-    <div class="callback-card surface-card">
-      <img src="/logo.svg?v=2" alt="logo" class="logo" />
-      <template v-if="status === 'loading'">
-        <n-spin size="large" style="margin: 18px 0" />
-        <h1>正在处理授权结果</h1>
+    <div class="card">
+      <div class="brand">
+        <img src="/logo.svg?v=2" alt="logo" class="logo" />
+        <span>御坂微枢</span>
+      </div>
 
-      </template>
+      <div v-if="status === 'loading'" class="state">
+        <n-spin :size="26" />
+        <p class="state-text">正在处理授权结果…</p>
+      </div>
 
       <template v-else-if="status === 'success' && app">
-        <div class="result-icon success"><n-icon :size="32"><CheckmarkCircleOutline /></n-icon></div>
-        <h1>小程序授权成功</h1>
+        <div class="badge success">
+          <n-icon :size="22"><CheckmarkOutline /></n-icon>
+        </div>
+        <h1>授权成功</h1>
+        <p class="hint">已加入你的小程序列表</p>
 
-        <div class="app-box">
-          <AppAvatar :src="app.head_img" :name="app.nick_name" :appid="app.appid" :size="52" />
-          <div class="app-info">
+        <div class="app-row">
+          <AppAvatar :src="app.head_img" :name="app.nick_name" :appid="app.appid" :size="44" />
+          <div class="app-meta">
             <div class="app-name">{{ app.nick_name || '未命名小程序' }}</div>
             <div class="app-id mono">{{ app.appid }}</div>
-            <div class="app-tags">
-              <n-tag size="small" :bordered="false" :type="app.status === 'active' ? 'primary' : 'default'">
-                {{ app.status === 'active' ? '已授权' : '已取消授权' }}
-              </n-tag>
-              <n-tag size="small" :bordered="false">{{ app.principal_name || '主体未知' }}</n-tag>
-            </div>
           </div>
+          <n-tag size="small" :bordered="false" :type="active ? 'primary' : 'default'">
+            {{ active ? '已授权' : '已取消' }}
+          </n-tag>
         </div>
+
+        <dl class="facts">
+          <div>
+            <dt>主体</dt>
+            <dd>{{ app.principal_name || '—' }}</dd>
+          </div>
+          <div>
+            <dt>认证</dt>
+            <dd>{{ app.verify_type_id === 0 ? '微信认证' : '未认证' }}</dd>
+          </div>
+        </dl>
+
         <div class="actions">
-          <n-button type="primary" @click="goList">列表</n-button>
-          <n-button @click="goHome">首页</n-button>
+          <n-button type="primary" @click="goDetail">
+            管理
+            <template #icon><n-icon><ArrowForwardOutline /></n-icon></template>
+          </n-button>
+          <n-button @click="goList">列表</n-button>
         </div>
       </template>
 
       <template v-else>
-        <div class="result-icon error"><n-icon :size="32"><AlertCircleOutline /></n-icon></div>
-        <h1>授权处理失败</h1>
-        <p class="muted">{{ errorText }}</p>
+        <div class="badge error">
+          <n-icon :size="22"><AlertCircleOutline /></n-icon>
+        </div>
+        <h1>授权失败</h1>
+        <p class="hint">{{ errorText }}</p>
         <div class="actions">
           <n-button type="primary" @click="router.push('/authorizers?add=1')">重试</n-button>
-          <n-button @click="goHome">
-            <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-            首页
-          </n-button>
+          <n-button @click="goList">列表</n-button>
         </div>
       </template>
     </div>
@@ -94,114 +113,151 @@ function goHome() {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background:
-    radial-gradient(700px 500px at 15% 0%, rgba(37, 99, 235, 0.12), transparent 60%),
-    radial-gradient(700px 500px at 100% 100%, rgba(29, 78, 216, 0.08), transparent 60%),
-    var(--page-bg);
+  background: var(--page-bg);
 }
 
-.callback-card {
-  width: min(520px, 100%);
-  padding: 34px 30px 28px;
-  text-align: center;
+.card {
+  width: min(420px, 100%);
+  padding: 26px 26px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 48px rgba(15, 23, 42, 0.07);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--text-muted);
 }
 
 .logo {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 
-h1 {
-  margin: 18px 0 8px;
-  font-size: 22px;
-  letter-spacing: -0.02em;
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 44px 0 30px;
 }
 
-.muted {
-  margin: 0 auto;
+.state-text {
+  margin: 0;
   color: var(--text-muted);
   font-size: 13px;
-  line-height: 1.7;
-  max-width: 380px;
 }
 
-.result-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+.badge {
+  width: 48px;
+  height: 48px;
+  margin-top: 24px;
+  border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: 22px;
 }
 
-.result-icon.success {
-  background: rgba(37, 99, 235, 0.12);
+.badge.success {
+  background: var(--primary-soft);
   color: var(--primary);
 }
 
-.result-icon.error {
-  background: rgba(239, 68, 68, 0.1);
+.badge.error {
+  background: rgba(239, 68, 68, 0.09);
   color: #dc2626;
 }
 
-.app-box {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  text-align: left;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  background: var(--surface-soft);
-  margin: 18px 0;
+h1 {
+  margin: 14px 0 4px;
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
 }
 
-.app-info {
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.app-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.app-meta {
+  flex: 1;
   min-width: 0;
 }
 
 .app-name {
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 620;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-id {
+  margin-top: 2px;
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 3px;
   word-break: break-all;
 }
 
-.app-tags {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-  flex-wrap: wrap;
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 12px 0 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--border);
+}
+
+.facts > div {
+  padding: 10px 14px;
+  background: var(--surface-soft);
+}
+
+.facts dt {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 560;
+  word-break: break-all;
 }
 
 .actions {
   display: flex;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 22px;
-}
-
-.login-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  margin-top: 26px;
-  color: var(--text-muted);
-  font-size: 12px;
+  margin-top: 20px;
 }
 
-@media (max-width: 520px) {
-  .callback-card {
-    padding: 30px 22px;
+@media (max-width: 480px) {
+  .card {
+    padding: 22px 18px 18px;
+  }
+
+  .facts {
+    grid-template-columns: 1fr;
   }
 }
 </style>

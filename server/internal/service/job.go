@@ -338,7 +338,7 @@ func (s *JobService) normalizePayload(ctx context.Context, jobType string, raw j
 				return nil, errors.New("上传代码参数格式错误")
 			}
 		}
-		if p.TemplateID <= 0 {
+		if p.TemplateID < 0 {
 			return nil, errors.New("请选择代码模板")
 		}
 		p.UserVersion = strings.TrimSpace(p.UserVersion)

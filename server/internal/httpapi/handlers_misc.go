@@ -66,7 +66,7 @@ func (s *Server) addDraft(c *gin.Context) {
 
 func (s *Server) deleteTemplate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("template_id"), 10, 64)
-	if err != nil || id <= 0 {
+	if err != nil || id < 0 {
 		fail(c, http.StatusBadRequest, "BAD_REQUEST", "模板 ID 不合法")
 		return
 	}
