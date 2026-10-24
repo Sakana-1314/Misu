@@ -19,6 +19,11 @@ const themeOverrides: GlobalThemeOverrides = {
     errorColor: '#EF4444',
     borderRadius: '8px',
     borderRadiusSmall: '6px',
+    bodyColor: '#f2f4f8',
+    cardColor: '#ffffff',
+    tableColor: '#ffffff',
+    modalColor: '#ffffff',
+    popoverColor: '#ffffff',
     fontFamily:
       'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
   },
@@ -26,10 +31,25 @@ const themeOverrides: GlobalThemeOverrides = {
   Button: { borderRadiusMedium: '7px', borderRadiusSmall: '6px', borderRadiusTiny: '5px' },
   Input: { borderRadius: '7px' },
   Tag: { borderRadius: '5px' },
-  DataTable: { borderRadius: '8px' },
+  DataTable: { borderRadius: '8px', thColor: '#f4f6fa', tdColorHover: '#f7f9fc' },
   Dropdown: { borderRadius: '8px' },
   Modal: { borderRadius: '10px' },
 }
+
+const darkOverrides: GlobalThemeOverrides = {
+  common: {
+    bodyColor: '#0d1119',
+    cardColor: '#151b26',
+    tableColor: '#151b26',
+    modalColor: '#151b26',
+    popoverColor: '#151b26',
+  },
+  DataTable: { thColor: '#1a2230', tdColorHover: '#1a2230' },
+}
+
+const mergedOverrides = computed<GlobalThemeOverrides>(() =>
+  themeStore.state.dark ? { ...themeOverrides, ...darkOverrides, common: { ...themeOverrides.common, ...darkOverrides.common } } : themeOverrides,
+)
 
 watchEffect(() => {
   document.documentElement.classList.toggle('dark', themeStore.state.dark)
@@ -37,7 +57,7 @@ watchEffect(() => {
 </script>
 
 <template>
-  <n-config-provider :theme="activeTheme" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
+  <n-config-provider :theme="activeTheme" :theme-overrides="mergedOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <n-global-style />
     <n-loading-bar-provider>
       <n-dialog-provider>
