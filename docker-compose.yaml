@@ -1,0 +1,52 @@
+services:
+  server:
+    image: ghcr.io/sakana-1314/misu-server:latest
+    container_name: misu-server
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: "8080"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PLATFORM_PUBLISHED: ${PLATFORM_PUBLISHED:-false}
+      EGRESS_IP: ${EGRESS_IP:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SECRET_ENC_KEY: ${SECRET_ENC_KEY}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      WX_COMPONENT_APPID: ${WX_COMPONENT_APPID}
+      WX_COMPONENT_APPSECRET: ${WX_COMPONENT_APPSECRET}
+      WX_COMPONENT_VERIFY_TOKEN: ${WX_COMPONENT_VERIFY_TOKEN}
+      WX_COMPONENT_ENCODING_AES_KEY: ${WX_COMPONENT_ENCODING_AES_KEY}
+      WX_COMPONENT_ENCODING_AES_KEY_PREVIOUS: ${WX_COMPONENT_ENCODING_AES_KEY_PREVIOUS:-}
+      JOB_CONCURRENCY: ${JOB_CONCURRENCY:-3}
+      WX_MAX_QPS: ${WX_MAX_QPS:-8}
+      WX_REQUEST_TIMEOUT_SECONDS: ${WX_REQUEST_TIMEOUT_SECONDS:-20}
+      AUDIT_POLL_INTERVAL_SECONDS: ${AUDIT_POLL_INTERVAL_SECONDS:-300}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "8080"
+    networks:
+      - 1panel-network
+
+  web:
+    image: ghcr.io/sakana-1314/misu-web:latest
+    container_name: misu-web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "24749:80"
+    networks:
+      - 1panel-network
+
+networks:
+  1panel-network:
+    external: true
