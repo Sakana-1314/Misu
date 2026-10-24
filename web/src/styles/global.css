@@ -298,7 +298,7 @@ a:hover {
 }
 
 .n-tabs .n-tabs-nav-scroll-content {
-  border-bottom: none;
+  border-bottom: none !important;
 }
 
 .n-tabs .n-tabs-tab {
