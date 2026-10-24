@@ -248,23 +248,16 @@ async function submit() {
   <n-modal
     v-model:show="visible"
     preset="card"
-    :title="`批量${actionMeta?.label || ''}`"
+    :title="actionMeta?.label || '批量操作'"
     :style="{ width: 'min(720px, 94vw)' }"
     :mask-closable="!submitting"
     :closable="!submitting"
   >
     <div class="modal-body">
-      <div class="action-head">
-        <div>
-          <div class="action-title">{{ actionMeta?.label || '批量操作' }}</div>
-        </div>
-        <n-tag type="primary" :bordered="false">{{ appids.length }} 个小程序</n-tag>
-      </div>
       <div class="app-summary">
+        <n-tag type="primary" :bordered="false">{{ appids.length }} 个小程序</n-tag>
         <span>{{ summary }}</span>
       </div>
-
-      <n-divider style="margin: 18px 0" />
 
       <n-form label-placement="top" :show-feedback="true">
         <template v-if="action === 'commit'">
@@ -393,26 +386,15 @@ async function submit() {
   padding-right: 4px;
 }
 
-.action-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  background: var(--primary-soft);
-}
-
-.action-title {
-  font-size: 16px;
-  font-weight: 650;
-}
-
-
-
 .app-summary {
-  margin-top: 12px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.6;
 }

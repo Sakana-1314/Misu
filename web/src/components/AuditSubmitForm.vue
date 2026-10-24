@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { AddOutline, CloseOutline } from '@vicons/ionicons5'
 import { api } from '@/api/client'
@@ -23,6 +23,8 @@ const props = withDefaults(
 
 const message = useMessage()
 
+const appList = ref<Authorizer[]>([])
+const loadingApps = ref(false)
 const referenceAppid = ref<string | null>(props.defaultAppid)
 const categories = ref<SettingCategoriesResponse | null>(null)
 const pages = ref<string[]>([])
@@ -76,7 +78,7 @@ function emptyItem(): AuditItemDraft {
 
 const appOptions = computed(() => {
   const seen = new Map<string, Authorizer>()
-  for (const app of props.apps) {
+  for (const app of [...props.apps, ...appList.value]) {
     if (app.status === 'active' && !seen.has(app.appid)) seen.set(app.appid, app)
   }
   return Array.from(seen.values()).map((app) => ({
@@ -84,6 +86,19 @@ const appOptions = computed(() => {
     value: app.appid,
   }))
 })
+
+async function loadApps() {
+  loadingApps.value = true
+  try {
+    const data = await api.get<Paged<Authorizer>>('/authorizers', {
+      params: { page: 1, page_size: 100, status: 'active' },
+      silent: true,
+    })
+    appList.value = data.items || []
+  } finally {
+    loadingApps.value = false
+  }
+}
 
 const pageOptions = computed(() => pages.value.map((page) => ({ label: page, value: page })))
 const categoryOptions = computed(
@@ -142,6 +157,10 @@ watch(
     referenceAppid.value = appid
   },
 )
+
+onMounted(() => {
+  void loadApps()
+})
 
 watch(
   referenceAppid,
@@ -236,7 +255,7 @@ defineExpose({ buildPayload })
           <n-select
             v-model:value="referenceAppid"
             :options="appOptions"
-            :loading="loadingRef"
+            :loading="loadingRef || loadingApps"
             filterable
             placeholder="选择一个小程序读取类目和页面"
           />
