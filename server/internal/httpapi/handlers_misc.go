@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"misu/internal/model"
-	"misu/internal/service"
 )
 
 func (s *Server) getDashboard(c *gin.Context) {
@@ -72,72 +71,6 @@ func (s *Server) deleteTemplate(c *gin.Context) {
 		return
 	}
 	if err := s.templates.Delete(c.Request.Context(), adminName(c), clientIP(c), id); err != nil {
-		s.respondServiceError(c, err)
-		return
-	}
-	ok(c, gin.H{"ok": true})
-}
-
-func (s *Server) listProfiles(c *gin.Context) {
-	items, err := s.profiles.List(c.Request.Context())
-	if err != nil {
-		s.respondServiceError(c, err)
-		return
-	}
-	ok(c, gin.H{"items": items, "total": len(items)})
-}
-
-func (s *Server) getProfile(c *gin.Context) {
-	id, valid := parseUintParam(c, "id")
-	if !valid {
-		return
-	}
-	p, err := s.profiles.Get(c.Request.Context(), id)
-	if err != nil {
-		s.respondServiceError(c, err)
-		return
-	}
-	ok(c, p)
-}
-
-func (s *Server) createProfile(c *gin.Context) {
-	var input service.ProfileInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		fail(c, http.StatusBadRequest, "BAD_REQUEST", "审核配置格式错误")
-		return
-	}
-	p, err := s.profiles.Create(c.Request.Context(), adminName(c), clientIP(c), input)
-	if err != nil {
-		s.respondServiceError(c, err)
-		return
-	}
-	ok(c, p)
-}
-
-func (s *Server) updateProfile(c *gin.Context) {
-	id, valid := parseUintParam(c, "id")
-	if !valid {
-		return
-	}
-	var input service.ProfileInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		fail(c, http.StatusBadRequest, "BAD_REQUEST", "审核配置格式错误")
-		return
-	}
-	p, err := s.profiles.Update(c.Request.Context(), adminName(c), clientIP(c), id, input)
-	if err != nil {
-		s.respondServiceError(c, err)
-		return
-	}
-	ok(c, p)
-}
-
-func (s *Server) deleteProfile(c *gin.Context) {
-	id, valid := parseUintParam(c, "id")
-	if !valid {
-		return
-	}
-	if err := s.profiles.Delete(c.Request.Context(), adminName(c), clientIP(c), id); err != nil {
 		s.respondServiceError(c, err)
 		return
 	}

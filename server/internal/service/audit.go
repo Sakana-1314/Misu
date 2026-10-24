@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -15,22 +18,32 @@ import (
 var ErrAlreadyAuditing = errors.New("该小程序已有版本正在审核中")
 
 type AuditService struct {
-	db    *gorm.DB
-	wx    *wechat.Client
-	auths *AuthorizerService
-	log   *slog.Logger
+	db     *gorm.DB
+	wx     *wechat.Client
+	auths  *AuthorizerService
+	assets *AuditAssetService
+	log    *slog.Logger
 }
 
+// AuditSubmitPayload is captured when the job is created. Media files are kept
+// in our own store and uploaded to WeChat per authorized mini program, because
+// media ids are bound to the authorizer access token.
 type AuditSubmitPayload struct {
-	Profile     ProfileSnapshot `json:"profile"`
-	AutoRelease bool            `json:"auto_release"`
+	ItemList       []wechat.AuditItem `json:"item_list"`
+	VersionDesc    string             `json:"version_desc"`
+	FeedbackInfo   string             `json:"feedback_info"`
+	FeedbackAssets []uint             `json:"feedback_assets"`
+	PreviewPics    []uint             `json:"preview_pics"`
+	PreviewVideos  []uint             `json:"preview_videos"`
+	UGCDeclare     *wechat.UGCDeclare `json:"ugc_declare,omitempty"`
+	AutoRelease    bool               `json:"auto_release"`
 }
 
-func NewAuditService(db *gorm.DB, wx *wechat.Client, auths *AuthorizerService, log *slog.Logger) *AuditService {
-	return &AuditService{db: db, wx: wx, auths: auths, log: log}
+func NewAuditService(db *gorm.DB, wx *wechat.Client, auths *AuthorizerService, assets *AuditAssetService, log *slog.Logger) *AuditService {
+	return &AuditService{db: db, wx: wx, auths: auths, assets: assets, log: log}
 }
 
-func (s *AuditService) Submit(ctx context.Context, appid string, profile ProfileSnapshot, autoRelease bool, profileID *uint) (*model.AuditRecord, error) {
+func (s *AuditService) Submit(ctx context.Context, appid string, p AuditSubmitPayload) (*model.AuditRecord, error) {
 	latestBefore, latestErr := s.auths.LatestAudit(ctx, appid)
 	if latestErr != nil {
 		// A first-time audit has no previous audit record. Some WeChat
@@ -41,16 +54,25 @@ func (s *AuditService) Submit(ctx context.Context, appid string, profile Profile
 	if latestBefore.Status == 2 {
 		return nil, ErrAlreadyAuditing
 	}
+
+	preview, err := s.buildPreview(ctx, appid, p)
+	if err != nil {
+		return nil, err
+	}
+	feedbackStuff, err := s.uploadAssets(ctx, appid, p.FeedbackAssets)
+	if err != nil {
+		return nil, err
+	}
 	req := wechat.SubmitAuditRequest{
-		ItemList:      profile.ItemList,
-		VersionDesc:   profile.VersionDesc,
-		FeedbackInfo:  profile.FeedbackInfo,
-		FeedbackStuff: profile.FeedbackStuff,
-		UGCDeclare:    profile.UGCDeclare,
-		PreviewInfo:   profile.PreviewInfo,
+		ItemList:      p.ItemList,
+		VersionDesc:   p.VersionDesc,
+		FeedbackInfo:  p.FeedbackInfo,
+		FeedbackStuff: strings.Join(feedbackStuff, "|"),
+		UGCDeclare:    p.UGCDeclare,
+		PreviewInfo:   preview,
 	}
 	var submitResp *wechat.SubmitAuditResponse
-	err := s.auths.CallWithToken(ctx, appid, func(token string) error {
+	err = s.auths.CallWithToken(ctx, appid, func(token string) error {
 		resp, err := s.wx.SubmitAudit(ctx, appid, token, req)
 		if err == nil {
 			submitResp = resp
@@ -83,8 +105,7 @@ func (s *AuditService) Submit(ctx context.Context, appid string, profile Profile
 			UserVersion:     version,
 			UserDesc:        desc,
 			SubmittedAt:     &now,
-			ProfileID:       profileID,
-			AutoRelease:     autoRelease,
+			AutoRelease:     p.AutoRelease,
 		}
 		if err := s.db.WithContext(ctx).Create(&record).Error; err != nil {
 			return nil, err
@@ -97,8 +118,7 @@ func (s *AuditService) Submit(ctx context.Context, appid string, profile Profile
 			"user_version": version,
 			"user_desc":    desc,
 			"submitted_at": now,
-			"profile_id":   profileID,
-			"auto_release": autoRelease,
+			"auto_release": p.AutoRelease,
 			"updated_at":   now,
 		}
 		if err := s.db.WithContext(ctx).Model(&model.AuditRecord{}).Where("id = ?", record.ID).Updates(updates).Error; err != nil {
@@ -107,6 +127,108 @@ func (s *AuditService) Submit(ctx context.Context, appid string, profile Profile
 		_ = s.db.WithContext(ctx).First(&record, record.ID).Error
 	}
 	return &record, nil
+}
+
+func (s *AuditService) buildPreview(ctx context.Context, appid string, p AuditSubmitPayload) (*wechat.PreviewInfo, error) {
+	if len(p.PreviewPics) == 0 && len(p.PreviewVideos) == 0 {
+		return nil, nil
+	}
+	pics, err := s.uploadAssets(ctx, appid, p.PreviewPics)
+	if err != nil {
+		return nil, err
+	}
+	videos, err := s.uploadAssets(ctx, appid, p.PreviewVideos)
+	if err != nil {
+		return nil, err
+	}
+	return &wechat.PreviewInfo{PicIDList: pics, VideoIDList: videos}, nil
+}
+
+func (s *AuditService) uploadAssets(ctx context.Context, appid string, ids []uint) ([]string, error) {
+	ids = uniqueIDs(ids)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	mediaIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		asset, err := s.assets.Get(ctx, id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("提审素材不存在，请重新上传")
+			}
+			return nil, err
+		}
+		var mediaID string
+		err = s.auths.CallWithToken(ctx, appid, func(token string) error {
+			resp, err := s.wx.UploadAuditMedia(ctx, appid, token, asset.Filename, asset.Data)
+			if err != nil {
+				return err
+			}
+			if resp.MediaID == "" {
+				return fmt.Errorf("微信未返回素材 media_id")
+			}
+			mediaID = resp.MediaID
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		mediaIDs = append(mediaIDs, mediaID)
+	}
+	return mediaIDs, nil
+}
+
+func ValidateAuditPayload(p AuditSubmitPayload) error {
+	if len(p.ItemList) < 1 || len(p.ItemList) > 5 {
+		return errors.New("审核项数量必须在 1-5 之间")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(p.VersionDesc)) > 200 {
+		return errors.New("版本说明不能超过 200 个字")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(p.FeedbackInfo)) > 200 {
+		return errors.New("驳回反馈内容不能超过 200 个字")
+	}
+	if len(p.FeedbackAssets) > 5 {
+		return errors.New("驳回反馈素材最多 5 个")
+	}
+	if len(p.PreviewPics) > 10 || len(p.PreviewVideos) > 5 {
+		return errors.New("预览素材数量超出限制")
+	}
+	for i, item := range p.ItemList {
+		if strings.TrimSpace(item.FirstClass) == "" || item.FirstID == 0 {
+			return fmt.Errorf("第 %d 个审核项缺少一级类目", i+1)
+		}
+		if strings.TrimSpace(item.SecondClass) == "" || item.SecondID == 0 {
+			return fmt.Errorf("第 %d 个审核项缺少二级类目", i+1)
+		}
+		if utf8.RuneCountInString(item.Title) > 32 {
+			return fmt.Errorf("第 %d 个审核项页面标题不能超过 32 个字", i+1)
+		}
+	}
+	if p.UGCDeclare != nil {
+		if len(p.UGCDeclare.Scene) == 0 {
+			return errors.New("UGC 声明需至少选择一个涉及场景")
+		}
+		if len(p.UGCDeclare.Method) == 0 && !containsInt(p.UGCDeclare.Scene, 0) {
+			return errors.New("UGC 声明需至少选择一种审核方式")
+		}
+		if utf8.RuneCountInString(p.UGCDeclare.OtherSceneDesc) > 256 {
+			return errors.New("UGC 其他场景说明不能超过 256 个字")
+		}
+		if utf8.RuneCountInString(p.UGCDeclare.AuditDesc) > 256 {
+			return errors.New("UGC 审核机制说明不能超过 256 个字")
+		}
+	}
+	return nil
+}
+
+func containsInt(list []int, target int) bool {
+	for _, value := range list {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *AuditService) Refresh(ctx context.Context, recordID uint) (*model.AuditRecord, error) {

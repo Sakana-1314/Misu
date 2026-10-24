@@ -91,18 +91,13 @@ type CodeTemplate struct {
 	UpdatedAt              time.Time `json:"updated_at"`
 }
 
-type AuditProfile struct {
-	ID            uint   `gorm:"primaryKey" json:"id"`
-	Name          string `gorm:"size:128" json:"name"`
-	ItemList      datatypes.JSON `gorm:"type:jsonb" json:"item_list"`
-	VersionDesc   string `gorm:"type:text" json:"version_desc"`
-	FeedbackInfo  string `gorm:"type:text" json:"feedback_info"`
-	FeedbackStuff string `gorm:"type:text" json:"feedback_stuff"`
-	UGCDeclare    datatypes.JSON `gorm:"type:jsonb" json:"ugc_declare"`
-	PreviewInfo   datatypes.JSON `gorm:"type:jsonb" json:"preview_info"`
-	IsDefault     bool   `gorm:"index" json:"is_default"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+type AuditAsset struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Filename  string    `gorm:"size:255" json:"filename"`
+	Mime      string    `gorm:"size:128" json:"mime"`
+	Size      int64     `json:"size"`
+	Data      []byte    `gorm:"type:bytea" json:"-"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type AuditRecord struct {
@@ -117,7 +112,6 @@ type AuditRecord struct {
 	SubmitAuditTime  *time.Time `json:"submit_audit_time"`
 	SubmittedAt      *time.Time `json:"submitted_at"`
 	LastCheckedAt    *time.Time `json:"last_checked_at"`
-	ProfileID        *uint  `json:"profile_id"`
 	AutoRelease      bool   `json:"auto_release"`
 	AutoReleaseJobID *uint  `json:"auto_release_job_id"`
 	CreatedAt        time.Time `json:"created_at"`

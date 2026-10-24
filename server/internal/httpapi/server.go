@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"misu/internal/config"
+	"misu/internal/openplatform"
 	"misu/internal/service"
 	"misu/internal/wechat"
 )
@@ -25,13 +26,14 @@ type Server struct {
 	tokens    *service.TokenManager
 	auths     *service.AuthorizerService
 	templates *service.TemplateService
-	profiles  *service.ProfileService
+	assets    *service.AuditAssetService
 	audits    *service.AuditService
 	jobs      *service.JobService
 	callback  *service.CallbackService
 	dashboard *service.DashboardService
-	settings  *service.SettingsService
-	wx        *wechat.Client
+	settings     *service.SettingsService
+	openplatform *openplatform.Client
+	wx           *wechat.Client
 
 	allowedHost   string
 	adminHash     []byte
@@ -47,12 +49,13 @@ func New(
 	tokens *service.TokenManager,
 	auths *service.AuthorizerService,
 	templates *service.TemplateService,
-	profiles *service.ProfileService,
+	assets *service.AuditAssetService,
 	audits *service.AuditService,
 	jobs *service.JobService,
 	callback *service.CallbackService,
 	dashboard *service.DashboardService,
 	settings *service.SettingsService,
+	openPlatform *openplatform.Client,
 	wx *wechat.Client,
 ) (*Server, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
@@ -71,12 +74,13 @@ func New(
 		tokens:        tokens,
 		auths:         auths,
 		templates:     templates,
-		profiles:      profiles,
+		assets:        assets,
 		audits:        audits,
 		jobs:          jobs,
 		callback:      callback,
 		dashboard:     dashboard,
 		settings:      settings,
+		openplatform:  openPlatform,
 		wx:            wx,
 		allowedHost:   parsed.Host,
 		adminHash:     hash,
@@ -134,19 +138,14 @@ func (s *Server) Engine() *gin.Engine {
 		auth.GET("/apps/:appid/visit-status", s.authorizerVisitStatus)
 		auth.GET("/apps/:appid/privacy-check", s.authorizerPrivacyCheck)
 		auth.GET("/apps/:appid/media", s.authorizerMedia)
-		auth.POST("/uploads/audit-media", s.uploadAuditMedia)
+		auth.POST("/audit-assets", s.uploadAuditAsset)
+		auth.GET("/audit-assets/:id", s.getAuditAsset)
 
 		auth.GET("/templates", s.listTemplates)
 		auth.POST("/templates/sync", s.syncTemplates)
 		auth.GET("/templates/drafts", s.draftTemplates)
 		auth.POST("/templates/from-draft", s.addDraft)
 		auth.DELETE("/templates/:template_id", s.deleteTemplate)
-
-		auth.GET("/audit-profiles", s.listProfiles)
-		auth.POST("/audit-profiles", s.createProfile)
-		auth.GET("/audit-profiles/:id", s.getProfile)
-		auth.PUT("/audit-profiles/:id", s.updateProfile)
-		auth.DELETE("/audit-profiles/:id", s.deleteProfile)
 
 		auth.POST("/jobs", s.createJob)
 		auth.GET("/jobs", s.listJobs)

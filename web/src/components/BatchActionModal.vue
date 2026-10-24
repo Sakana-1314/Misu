@@ -2,9 +2,10 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { api } from '@/api/client'
-import type { AuditProfile, Authorizer, CodeTemplate, DomainResponse, Job } from '@/types/api'
+import type { Authorizer, CodeTemplate, DomainResponse, Job } from '@/types/api'
 import { domainActions, domainFields, jobTypeOptions } from '@/utils/constants'
 import { parseLines } from '@/utils/format'
+import AuditSubmitForm from '@/components/AuditSubmitForm.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -36,8 +37,8 @@ const visible = computed({
 const submitting = ref(false)
 const loadingOptions = ref(false)
 const templates = ref<CodeTemplate[]>([])
-const profiles = ref<AuditProfile[]>([])
 const confirmed = ref(false)
+const auditForm = ref<InstanceType<typeof AuditSubmitForm> | null>(null)
 
 const commitForm = reactive({
   templateId: null as number | null,
@@ -45,7 +46,6 @@ const commitForm = reactive({
   userDesc: '',
   extJson: '{\n  "appid": "{{appid}}"\n}',
 })
-const profileId = ref<number | null>(null)
 const autoRelease = ref(false)
 const rollbackVersion = ref('')
 const grayPercentage = ref(10)
@@ -85,13 +85,6 @@ const templateOptions = computed(() =>
   })),
 )
 
-const profileOptions = computed(() =>
-  profiles.value.map((profile) => ({
-    label: `${profile.name}${profile.is_default ? '（默认）' : ''} · ${profile.item_list?.length || 0} 个审核项`,
-    value: profile.id,
-  })),
-)
-
 const requiresConfirm = computed(() => {
   if (!props.action) return false
   if (['release', 'undo_audit', 'rollback', 'gray_release', 'cancel_gray_release', 'unbind_tester', 'modify_domain'].includes(props.action)) {
@@ -111,7 +104,6 @@ function resetForms() {
   commitForm.userVersion = ''
   commitForm.userDesc = ''
   commitForm.extJson = '{\n  "appid": "{{appid}}"\n}'
-  profileId.value = null
   autoRelease.value = false
   rollbackVersion.value = props.initialRollbackVersion || ''
   grayPercentage.value = 10
@@ -138,17 +130,6 @@ async function init() {
       const data = await api.get<{ items: CodeTemplate[] }>('/templates')
       templates.value = data.items || []
       if (templates.value.length > 0) commitForm.templateId = templates.value[0].template_id
-    } finally {
-      loadingOptions.value = false
-    }
-  }
-  if (props.action === 'submit_audit') {
-    loadingOptions.value = true
-    try {
-      const data = await api.get<{ items: AuditProfile[] }>('/audit-profiles')
-      profiles.value = data.items || []
-      const preferred = profiles.value.find((item) => item.is_default) || profiles.value[0]
-      if (preferred) profileId.value = preferred.id
     } finally {
       loadingOptions.value = false
     }
@@ -195,9 +176,11 @@ function buildPayload(): any {
         ext_json: ext,
       }
     }
-    case 'submit_audit':
-      if (!profileId.value) throw new Error('请选择审核配置')
-      return { profile_id: profileId.value, auto_release: autoRelease.value }
+    case 'submit_audit': {
+      const result = auditForm.value?.buildPayload()
+      if (!result || 'error' in result) throw new Error(result?.error || '请填写提审信息')
+      return result.payload
+    }
     case 'rollback':
       return { app_version: rollbackVersion.value.trim() }
     case 'gray_release':
@@ -313,17 +296,7 @@ async function submit() {
         </template>
 
         <template v-else-if="action === 'submit_audit'">
-          <n-form-item label="审核配置">
-            <n-select
-              v-model:value="profileId"
-              :options="profileOptions"
-              :loading="loadingOptions"
-              placeholder="请选择审核配置"
-            />
-          </n-form-item>
-          <n-form-item label="审核通过后自动发布">
-            <n-switch v-model:value="autoRelease" />
-          </n-form-item>
+          <AuditSubmitForm ref="auditForm" :apps="apps" :default-appid="appids[0] || null" />
         </template>
 
         <template v-else-if="action === 'rollback'">
@@ -425,10 +398,9 @@ async function submit() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 18px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(7, 193, 96, 0.09), rgba(7, 193, 96, 0.03));
-  border: 1px solid rgba(7, 193, 96, 0.16);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
 }
 
 .action-title {
@@ -504,10 +476,9 @@ async function submit() {
 
 .confirm-box {
   margin-top: 8px;
-  padding: 14px 16px;
-  border-radius: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
   background: var(--surface-soft);
-  border: 1px solid var(--border);
 }
 
 .modal-footer {

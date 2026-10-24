@@ -697,8 +697,8 @@ const domainGroups = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 20px 22px;
+  gap: 18px;
+  padding: 16px 18px;
   flex-wrap: wrap;
 }
 
@@ -714,7 +714,7 @@ const domainGroups = computed(() => {
 }
 
 .hero-name {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -745,12 +745,12 @@ const domainGroups = computed(() => {
 .version-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 16px 0;
+  gap: 10px;
+  margin: 12px 0;
 }
 
 .version-card {
-  padding: 16px 18px;
+  padding: 13px 15px;
 }
 
 .version-head {
@@ -762,8 +762,8 @@ const domainGroups = computed(() => {
 }
 
 .version-number {
-  margin-top: 10px;
-  font-size: 24px;
+  margin-top: 8px;
+  font-size: 21px;
   font-weight: 680;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -780,13 +780,13 @@ const domainGroups = computed(() => {
 }
 
 .version-time {
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--text-muted);
   font-size: 11px;
 }
 
 .tab-card {
-  padding: 8px 20px 20px;
+  padding: 6px 16px 16px;
 }
 
 .overview {
@@ -794,7 +794,7 @@ const domainGroups = computed(() => {
 }
 
 .section-block {
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
 .section-title {
@@ -823,9 +823,8 @@ const domainGroups = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
   background: var(--surface-soft);
 }
 
@@ -837,14 +836,13 @@ const domainGroups = computed(() => {
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 18px;
 }
 
 .gray-box {
-  margin-top: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   background: var(--surface-soft);
 }
 
@@ -873,9 +871,9 @@ const domainGroups = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
 }
 
 .history-version {
@@ -900,13 +898,12 @@ const domainGroups = computed(() => {
 .domain-groups {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 10px;
 }
 
 .domain-group {
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   background: var(--surface-soft);
 }
 
@@ -938,18 +935,18 @@ const domainGroups = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
   font-size: 12px;
   word-break: break-all;
 }
 
 .qr-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 28px;
-  padding: 8px 0;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  padding: 6px 0;
 }
 
 .qr-form {
@@ -960,11 +957,10 @@ const domainGroups = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 280px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
+  min-height: 240px;
+  border-radius: var(--radius-md);
   background: var(--surface-soft);
-  padding: 20px;
+  padding: 16px;
 }
 
 .qr-result {
@@ -979,7 +975,7 @@ const domainGroups = computed(() => {
   height: 220px;
   object-fit: contain;
   background: #fff;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .qr-empty {
@@ -999,8 +995,7 @@ const domainGroups = computed(() => {
 
 .screenshot-grid img {
   width: 100%;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 @media (max-width: 1100px) {

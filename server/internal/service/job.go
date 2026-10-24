@@ -59,17 +59,17 @@ func JobTitle(jobType string) string {
 }
 
 type JobService struct {
-	cfg      *config.Config
-	db       *gorm.DB
-	runner   *JobRunner
-	logs     *LogService
-	profiles *ProfileService
-	auths    *AuthorizerService
-	log      *slog.Logger
+	cfg    *config.Config
+	db     *gorm.DB
+	runner *JobRunner
+	logs   *LogService
+	assets *AuditAssetService
+	auths  *AuthorizerService
+	log    *slog.Logger
 }
 
-func NewJobService(cfg *config.Config, db *gorm.DB, runner *JobRunner, logs *LogService, profiles *ProfileService, auths *AuthorizerService, log *slog.Logger) *JobService {
-	return &JobService{cfg: cfg, db: db, runner: runner, logs: logs, profiles: profiles, auths: auths, log: log}
+func NewJobService(cfg *config.Config, db *gorm.DB, runner *JobRunner, logs *LogService, assets *AuditAssetService, auths *AuthorizerService, log *slog.Logger) *JobService {
+	return &JobService{cfg: cfg, db: db, runner: runner, logs: logs, assets: assets, auths: auths, log: log}
 }
 
 type CreateJobRequest struct {
@@ -354,23 +354,19 @@ func (s *JobService) normalizePayload(ctx context.Context, jobType string, raw j
 		}
 		return marshalJSON(p)
 	case JobSubmitAudit:
-		var p struct {
-			ProfileID   uint `json:"profile_id"`
-			AutoRelease bool `json:"auto_release"`
-		}
+		var p AuditSubmitPayload
 		if len(raw) > 0 {
 			if err := json.Unmarshal(raw, &p); err != nil {
 				return nil, errors.New("提审参数格式错误")
 			}
 		}
-		if p.ProfileID == 0 {
-			return nil, errors.New("请选择审核配置")
+		if err := ValidateAuditPayload(p); err != nil {
+			return nil, err
 		}
-		snapshot, err := s.profiles.Snapshot(ctx, p.ProfileID)
-		if err != nil {
-			return nil, fmt.Errorf("加载审核配置失败: %w", err)
+		if err := s.assets.EnsureExists(ctx, append(append(append([]uint{}, p.PreviewPics...), p.PreviewVideos...), p.FeedbackAssets...)); err != nil {
+			return nil, err
 		}
-		return marshalJSON(AuditSubmitPayload{Profile: *snapshot, AutoRelease: p.AutoRelease})
+		return marshalJSON(p)
 	case JobRelease, JobUndoAudit, JobCancelGrayRelease, JobPreflight:
 		return datatypes.JSON([]byte("{}")), nil
 	case JobRollback:

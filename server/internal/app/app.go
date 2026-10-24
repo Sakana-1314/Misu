@@ -14,6 +14,7 @@ import (
 	"misu/internal/config"
 	"misu/internal/database"
 	"misu/internal/httpapi"
+	"misu/internal/openplatform"
 	"misu/internal/secret"
 	"misu/internal/service"
 	"misu/internal/wechat"
@@ -60,19 +61,20 @@ func New(cfg *config.Config) (*App, error) {
 	tokens := service.NewTokenManager(cfg, db, box, wx, log)
 	auths := service.NewAuthorizerService(cfg, db, box, wx, tokens, logs, log)
 	templates := service.NewTemplateService(db, wx, tokens, logs, log)
-	profiles := service.NewProfileService(db, logs, log)
-	audits := service.NewAuditService(db, wx, auths, log)
+	assets := service.NewAuditAssetService(db, log)
+	audits := service.NewAuditService(db, wx, auths, assets, log)
 
 	runner := service.NewJobRunner(cfg, db, logs, log)
 	for _, executor := range service.NewExecutors(db, wx, auths, audits, log) {
 		runner.Register(executor)
 	}
-	jobs := service.NewJobService(cfg, db, runner, logs, profiles, auths, log)
+	jobs := service.NewJobService(cfg, db, runner, logs, assets, auths, log)
 	callback := service.NewCallbackService(cfg, db, tokens, auths, audits, logs, log)
 	dashboard := service.NewDashboardService(db, tokens, cfg)
 	settings := service.NewSettingsService(cfg, db, tokens, logs, log)
+	openPlatform := openplatform.New(cfg)
 
-	server, err := httpapi.New(cfg, log, db, logs, tokens, auths, templates, profiles, audits, jobs, callback, dashboard, settings, wx)
+	server, err := httpapi.New(cfg, log, db, logs, tokens, auths, templates, assets, audits, jobs, callback, dashboard, settings, openPlatform, wx)
 	if err != nil {
 		return nil, err
 	}

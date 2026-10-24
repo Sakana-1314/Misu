@@ -14,7 +14,7 @@ func TestRouteRegistration(t *testing.T) {
 		JWTSecret:     strings.Repeat("x", 32),
 		AdminPassword: "test-password",
 	}
-	s, err := New(cfg, slog.Default(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	s, err := New(cfg, slog.Default(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

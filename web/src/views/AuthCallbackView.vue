@@ -102,15 +102,15 @@ function goHome() {
 
 .callback-card {
   width: min(520px, 100%);
-  padding: 40px 38px 34px;
+  padding: 34px 30px 28px;
   text-align: center;
 }
 
 .logo {
   width: 48px;
   height: 48px;
-  border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(7, 193, 96, 0.2);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
 }
 
 h1 {
@@ -130,7 +130,7 @@ h1 {
 .result-icon {
   width: 64px;
   height: 64px;
-  border-radius: 20px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -152,11 +152,10 @@ h1 {
   align-items: center;
   gap: 14px;
   text-align: left;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  padding: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-soft);
-  margin: 22px 0;
+  margin: 18px 0;
 }
 
 .app-info {

@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { api } from '@/api/client'
 import type { PreauthResult, SyncResult } from '@/types/api'
-import QrCodeView from './QrCodeView.vue'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{
@@ -17,47 +16,44 @@ const visible = computed({
 })
 
 const message = useMessage()
+const appid = ref('')
 const loading = ref(false)
 const syncing = ref(false)
-const result = ref<PreauthResult | null>(null)
 const error = ref('')
-const popupBlocked = ref(false)
+const generated = ref<PreauthResult | null>(null)
+const appidPattern = /^wx[0-9a-f]{16}$/
 
-const bridgeUrl = computed(() => {
-  if (!result.value) return ''
-  const url = new URL('/auth-open.html', window.location.origin)
-  url.searchParams.set('url', result.value.auth_url)
-  return url.toString()
-})
+const validAppID = computed(() => appidPattern.test(appid.value.trim().toLowerCase()))
 
-async function generate() {
-  loading.value = true
+function reset() {
+  appid.value = ''
   error.value = ''
-  popupBlocked.value = false
-  try {
-    result.value = await api.post<PreauthResult>('/authorizers/preauth', null, { silent: true })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '生成授权链接失败'
-  } finally {
-    loading.value = false
-  }
+  generated.value = null
+  loading.value = false
+  syncing.value = false
 }
 
-function openAuthPage() {
-  if (!bridgeUrl.value) return
-  const popup = window.open(
-    bridgeUrl.value,
-    'wechat_authorization',
-    'popup=yes,width=520,height=760,menubar=no,toolbar=no,location=yes,status=no,resizable=yes,scrollbars=yes',
-  )
-  if (!popup) {
-    popupBlocked.value = true
+watch(
+  () => props.show,
+  (show) => {
+    if (show) reset()
+  },
+)
+
+async function startAuth() {
+  const value = appid.value.trim().toLowerCase()
+  if (!validAppID.value) {
+    error.value = '请输入正确的小程序 AppID'
     return
   }
+  loading.value = true
+  error.value = ''
   try {
-    popup.opener = null
-  } catch {
-    // ignore
+    generated.value = await api.post<PreauthResult>('/authorizers/preauth', { appid: value }, { silent: true })
+    window.location.assign(generated.value.auth_url)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '生成授权链接失败'
+    loading.value = false
   }
 }
 
@@ -74,18 +70,6 @@ async function sync() {
     syncing.value = false
   }
 }
-
-watch(
-  () => props.show,
-  (show) => {
-    if (!show) return
-    result.value = null
-    error.value = ''
-    popupBlocked.value = false
-    void generate()
-  },
-  { immediate: true },
-)
 </script>
 
 <template>
@@ -93,47 +77,38 @@ watch(
     v-model:show="visible"
     preset="card"
     title="新增小程序"
-    :style="{ width: 'min(500px, 94vw)' }"
-    :mask-closable="!syncing"
-    :closable="!syncing"
+    :style="{ width: 'min(460px, 94vw)' }"
+    :mask-closable="!loading && !syncing"
+    :closable="!loading && !syncing"
   >
-    <div v-if="loading" class="center"><n-spin /></div>
-    <n-alert v-else-if="error" type="error" :bordered="false">{{ error }}</n-alert>
-    <div v-else-if="result" class="add-body">
-      <QrCodeView :value="result.auth_url" :size="196" alt="微信授权二维码" />
-      <n-alert v-if="popupBlocked" type="warning" :bordered="false">
-        浏览器拦截了弹窗，
-        <a :href="bridgeUrl" target="_blank" rel="noopener">直接打开授权页</a>
+    <n-form label-placement="top" @submit.prevent="startAuth">
+      <n-form-item label="小程序 AppID">
+        <n-input
+          v-model:value="appid"
+          placeholder="wx1234567890abcdef"
+          maxlength="18"
+          :disabled="loading"
+          @keyup.enter="startAuth"
+        />
+      </n-form-item>
+      <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
+      <n-alert v-else type="info" :bordered="false">
+        将跳转微信授权页，确认授权后自动返回。
       </n-alert>
-    </div>
+    </n-form>
     <template #footer>
       <div class="modal-footer">
-        <n-button :disabled="syncing" @click="visible = false">关闭</n-button>
-        <n-button :disabled="loading" @click="generate">重试</n-button>
-        <n-button :loading="syncing" @click="sync">同步</n-button>
-        <n-button type="primary" :disabled="!result" @click="openAuthPage">授权</n-button>
+        <n-button :disabled="loading || syncing" @click="sync">同步</n-button>
+        <n-button type="primary" :loading="loading" :disabled="!validAppID" @click="startAuth">授权</n-button>
       </div>
     </template>
   </n-modal>
 </template>
 
 <style scoped>
-.center {
-  padding: 40px 0;
-  text-align: center;
-}
-
-.add-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
 }

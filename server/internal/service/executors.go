@@ -116,27 +116,24 @@ func (d *ExecutorDeps) submitAudit(ctx context.Context, job *model.Job, item *mo
 	if err := DecodeJobPayload(job, &p); err != nil {
 		return errorResult(err)
 	}
-	profileID := p.Profile.ID
-	var profilePtr *uint
-	if profileID > 0 {
-		profilePtr = &profileID
-	}
-	record, err := d.audits.Submit(ctx, item.AuthorizerAppID, p.Profile, p.AutoRelease, profilePtr)
+	record, err := d.audits.Submit(ctx, item.AuthorizerAppID, p)
 	if err != nil {
 		if errors.Is(err, ErrAlreadyAuditing) {
 			return ItemResult{
 				Skipped:      true,
 				ErrorCode:    "AUDIT_IN_PROGRESS",
 				ErrorMessage: "该小程序已有版本正在审核中，已跳过",
-				Request:      map[string]any{"profile": p.Profile.Name},
+				Request:      map[string]any{"item_list": p.ItemList},
 			}
 		}
 		return errorResult(err)
 	}
 	return ItemResult{
 		Request: map[string]any{
-			"profile": p.Profile.Name, "item_list": p.Profile.ItemList,
-			"version_desc": p.Profile.VersionDesc, "auto_release": p.AutoRelease,
+			"item_list": p.ItemList, "version_desc": p.VersionDesc,
+			"preview_pics": len(p.PreviewPics), "preview_videos": len(p.PreviewVideos),
+			"feedback_assets": len(p.FeedbackAssets), "ugc_declare": p.UGCDeclare != nil,
+			"auto_release": p.AutoRelease,
 		},
 		Response: map[string]any{
 			"audit_id": record.AuditID, "status": record.Status,

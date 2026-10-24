@@ -72,28 +72,27 @@ async function submit() {
 
 .login-card {
   width: min(380px, 100%);
-  padding: 34px 32px 30px;
-  border-radius: 18px;
+  padding: 30px 28px 26px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 24px 70px rgba(2, 8, 23, 0.35);
+  box-shadow: 0 20px 56px rgba(2, 8, 23, 0.32);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .logo {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
 }
 
 .name {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }

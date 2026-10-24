@@ -17,15 +17,18 @@ const themeOverrides: GlobalThemeOverrides = {
     successColor: '#2563EB',
     warningColor: '#F59E0B',
     errorColor: '#EF4444',
-    borderRadius: '10px',
-    borderRadiusSmall: '7px',
+    borderRadius: '8px',
+    borderRadiusSmall: '6px',
     fontFamily:
       'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
   },
-  Card: { borderRadius: '14px' },
-  Button: { borderRadiusMedium: '9px', borderRadiusSmall: '7px', borderRadiusTiny: '6px' },
-  Input: { borderRadius: '9px' },
-  Tag: { borderRadius: '6px' },
+  Card: { borderRadius: '10px' },
+  Button: { borderRadiusMedium: '7px', borderRadiusSmall: '6px', borderRadiusTiny: '5px' },
+  Input: { borderRadius: '7px' },
+  Tag: { borderRadius: '5px' },
+  DataTable: { borderRadius: '8px' },
+  Dropdown: { borderRadius: '8px' },
+  Modal: { borderRadius: '10px' },
 }
 
 watchEffect(() => {
