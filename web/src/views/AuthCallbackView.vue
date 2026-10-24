@@ -25,7 +25,7 @@ onMounted(async () => {
     status.value = 'success'
   } catch (error) {
     status.value = 'error'
-    errorText.value = error instanceof ApiError ? error.message : '授权处理失败，请重新发起授权。'
+    errorText.value = error instanceof ApiError ? error.message : '授权处理失败，请重试。'
   }
 })
 
@@ -66,8 +66,8 @@ function goHome() {
           </div>
         </div>
         <div class="actions">
-          <n-button type="primary" @click="goList">查看小程序列表</n-button>
-          <n-button quaternary @click="goHome">返回首页</n-button>
+          <n-button type="primary" @click="goList">列表</n-button>
+          <n-button @click="goHome">首页</n-button>
         </div>
       </template>
 
@@ -76,10 +76,10 @@ function goHome() {
         <h1>授权处理失败</h1>
         <p class="muted">{{ errorText }}</p>
         <div class="actions">
-          <n-button type="primary" @click="router.push('/authorizers?add=1')">重新发起授权</n-button>
-          <n-button quaternary @click="goHome">
+          <n-button type="primary" @click="router.push('/authorizers?add=1')">重试</n-button>
+          <n-button @click="goHome">
             <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-            返回首页
+            首页
           </n-button>
         </div>
       </template>

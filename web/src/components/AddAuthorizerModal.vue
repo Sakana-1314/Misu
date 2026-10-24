@@ -101,18 +101,18 @@ watch(
     <n-alert v-else-if="error" type="error" :bordered="false">{{ error }}</n-alert>
     <div v-else-if="result" class="add-body">
       <QrCodeView :value="result.auth_url" :size="196" alt="微信授权二维码" />
-      <n-button type="primary" block @click="openAuthPage">打开授权页</n-button>
       <n-alert v-if="popupBlocked" type="warning" :bordered="false">
         浏览器拦截了弹窗，
         <a :href="bridgeUrl" target="_blank" rel="noopener">直接打开授权页</a>
       </n-alert>
-      <div class="actions">
-        <n-button quaternary @click="generate">重新生成</n-button>
-        <n-button :loading="syncing" @click="sync">我已授权，同步</n-button>
-      </div>
     </div>
     <template #footer>
-      <n-button @click="visible = false">关闭</n-button>
+      <div class="modal-footer">
+        <n-button :disabled="syncing" @click="visible = false">关闭</n-button>
+        <n-button :disabled="loading" @click="generate">重试</n-button>
+        <n-button :loading="syncing" @click="sync">同步</n-button>
+        <n-button type="primary" :disabled="!result" @click="openAuthPage">授权</n-button>
+      </div>
     </template>
   </n-modal>
 </template>
@@ -130,10 +130,11 @@ watch(
   gap: 14px;
 }
 
-.actions {
+.modal-footer {
   display: flex;
-  justify-content: space-between;
-  width: 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
 }
 </style>

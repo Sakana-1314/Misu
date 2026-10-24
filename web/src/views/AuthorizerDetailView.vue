@@ -103,7 +103,7 @@ const releaseActionLabels: Record<string, string> = {
   release: '发布',
   rollback: '版本回退',
   gray: '分阶段发布',
-  cancel_gray: '取消灰度',
+  cancel_gray: '取消',
 }
 
 const auditsPageCount = computed(() => Math.max(1, Math.ceil(auditsTotal.value / 20)))
@@ -318,12 +318,12 @@ const auditColumns = computed<DataTableColumns<AuditRecord>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 150,
+    width: 216,
     render: (row) =>
       h('div', { class: 'inline-actions' }, [
-        h(NButton, { text: true, type: 'primary', onClick: () => refreshAudit(row) }, { default: () => '刷新' }),
+        h(NButton, { onClick: () => refreshAudit(row) }, { default: () => '刷新' }),
         ...(row.screenshot
-          ? [h(NButton, { text: true, onClick: () => openScreenshot(row) }, { default: () => '查看截图' })]
+          ? [h(NButton, { onClick: () => openScreenshot(row) }, { default: () => '截图' })]
           : []),
       ]),
   },
@@ -413,13 +413,13 @@ const domainGroups = computed(() => {
     <div v-else-if="appError" class="surface-card empty-state">
       <h3>无法加载小程序</h3>
       <p>{{ appError }}</p>
-      <n-button type="primary" @click="router.push('/authorizers')">返回小程序列表</n-button>
+      <n-button type="primary" @click="router.push('/authorizers')">返回</n-button>
     </div>
 
     <template v-else-if="authorizer">
       <div class="detail-hero surface-card">
         <div class="hero-left">
-          <n-button quaternary circle @click="router.push('/authorizers')">
+          <n-button circle class="icon-button" @click="router.push('/authorizers')">
             <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
           </n-button>
           <AppAvatar :src="authorizer.head_img" :name="authorizer.nick_name" :appid="authorizer.appid" :size="64" />
@@ -427,7 +427,7 @@ const domainGroups = computed(() => {
             <div class="hero-name">{{ authorizer.nick_name || '未命名小程序' }}</div>
             <div class="hero-id">
               <span class="mono">{{ authorizer.appid }}</span>
-              <CopyButton :text="authorizer.appid" label="复制 AppID" />
+              <CopyButton :text="authorizer.appid" label="复制" />
             </div>
             <div class="hero-tags">
               <StatusTag kind="authorizer" :value="authorizer.status" />
@@ -441,14 +441,14 @@ const domainGroups = computed(() => {
           </div>
         </div>
         <div class="hero-actions">
-          <n-button secondary :loading="refreshing" @click="refreshInfo">
+          <n-button :loading="refreshing" @click="refreshInfo">
             <template #icon><n-icon><RefreshOutline /></n-icon></template>
-            刷新信息
+            刷新
           </n-button>
-          <n-button secondary :disabled="!active" @click="openAction('commit')">上传代码</n-button>
-          <n-button type="primary" :disabled="!active" @click="openAction('submit_audit')">提交审核</n-button>
+          <n-button :disabled="!active" @click="openAction('commit')">上传</n-button>
+          <n-button type="primary" :disabled="!active" @click="openAction('submit_audit')">提审</n-button>
           <n-dropdown :options="actionOptions" trigger="click" @select="(key: string | number) => openAction(String(key))">
-            <n-button quaternary :disabled="!active">更多操作</n-button>
+            <n-button :disabled="!active">更多</n-button>
           </n-dropdown>
         </div>
       </div>
@@ -536,7 +536,7 @@ const domainGroups = computed(() => {
                     <div>
                       <div class="section-title">分阶段发布</div>
                     </div>
-                    <n-button quaternary :disabled="!active" @click="openAction('gray_release')">设置灰度</n-button>
+                    <n-button :disabled="!active" @click="openAction('gray_release')">灰度</n-button>
                   </div>
                   <div v-if="grayPlan" class="gray-box">
                     <div class="gray-head">
@@ -546,7 +546,7 @@ const domainGroups = computed(() => {
                       <span class="gray-percent">{{ grayPlan.gray_percentage }}%</span>
                     </div>
                     <div class="cell-muted">项目成员优先：{{ grayPlan.support_debuger_first ? '是' : '否' }} · 体验成员优先：{{ grayPlan.support_experiencer_first ? '是' : '否' }}</div>
-                    <n-button v-if="grayPlan.status === 1 || grayPlan.status === 2" secondary style="margin-top: 10px" :disabled="!active" @click="openAction('cancel_gray_release')">取消灰度</n-button>
+                    <n-button v-if="grayPlan.status === 1 || grayPlan.status === 2" style="margin-top: 10px" :disabled="!active" @click="openAction('cancel_gray_release')">取消</n-button>
                   </div>
                   <div v-else class="cell-muted">暂无进行中的灰度发布。</div>
                 </div>
@@ -556,7 +556,7 @@ const domainGroups = computed(() => {
                     <div>
                       <div class="section-title">历史版本</div>
                     </div>
-                    <n-button quaternary :loading="historyLoading" @click="loadHistory">加载</n-button>
+                    <n-button :loading="historyLoading" @click="loadHistory">加载</n-button>
                   </div>
                   <div v-if="historyVersions.length" class="history-list">
                     <div v-for="item in historyVersions" :key="item.app_version" class="history-row">
@@ -564,7 +564,7 @@ const domainGroups = computed(() => {
                         <div class="history-version">{{ item.app_version }}</div>
                         <div class="cell-muted">{{ item.user_desc || item.user_version || '—' }} · {{ fromUnix(item.commit_time) }}</div>
                       </div>
-                      <n-button quaternary type="primary" @click="openAction('rollback', item.app_version)">回退到此版本</n-button>
+                      <n-button @click="openAction('rollback', item.app_version)">回退</n-button>
                     </div>
                   </div>
                   <div v-else class="cell-muted">{{ historyLoaded ? '暂无' : '—' }}</div>
@@ -575,7 +575,7 @@ const domainGroups = computed(() => {
 
           <n-tab-pane name="audits" tab="审核记录">
             <div class="pane-toolbar">
-              <n-button quaternary :loading="refreshing" @click="refreshLatestAudit">刷新</n-button>
+              <n-button :loading="refreshing" @click="refreshLatestAudit">刷新</n-button>
             </div>
             <n-data-table :columns="auditColumns" :data="audits" :loading="auditsLoading" :pagination="false" size="small" :scroll-x="1000" />
             <div v-if="auditsPageCount > 1" class="pager">
@@ -586,7 +586,7 @@ const domainGroups = computed(() => {
 
           <n-tab-pane name="releases" tab="发布记录">
             <div class="pane-toolbar">
-              <n-button quaternary :loading="releasesLoading" @click="loadReleases(releasesPage)">刷新</n-button>
+              <n-button :loading="releasesLoading" @click="loadReleases(releasesPage)">刷新</n-button>
             </div>
             <n-data-table :columns="releaseColumns" :data="releases" :loading="releasesLoading" :pagination="false" size="small" :scroll-x="900" />
             <div v-if="releasesPageCount > 1" class="pager">
@@ -597,8 +597,8 @@ const domainGroups = computed(() => {
 
           <n-tab-pane name="domains" tab="服务器域名">
             <div class="pane-toolbar">
-              <n-button quaternary :loading="domainsLoading" @click="loadDomains">刷新</n-button>
-              <n-button type="primary" :disabled="!active" @click="openAction('modify_domain')">编辑域名</n-button>
+              <n-button :loading="domainsLoading" @click="loadDomains">刷新</n-button>
+              <n-button type="primary" :disabled="!active" @click="openAction('modify_domain')">编辑</n-button>
             </div>
             <n-alert type="warning" :bordered="false" style="margin-bottom: 14px">修改域名每月最多 50 次。</n-alert>
             <div v-if="domains" class="domain-groups">
@@ -622,13 +622,13 @@ const domainGroups = computed(() => {
           <n-tab-pane name="testers" tab="体验者">
             <div class="tester-form">
               <n-input v-model:value="testerWechatid" placeholder="输入体验者微信号" style="max-width: 280px" />
-              <n-button type="primary" :loading="bindingTester" :disabled="!active" @click="bindTester">绑定体验者</n-button>
-              <n-button quaternary :loading="testersLoading" @click="loadTesters">刷新</n-button>
+              <n-button type="primary" :loading="bindingTester" :disabled="!active" @click="bindTester">绑定</n-button>
+              <n-button :loading="testersLoading" @click="loadTesters">刷新</n-button>
             </div>
             <div v-if="testers.length" class="tester-list">
               <div v-for="tester in testers" :key="tester" class="tester-row">
                 <span class="mono">{{ tester }}</span>
-                <n-button text :disabled="!active" @click="unbindTester(tester)">解绑</n-button>
+                <n-button :disabled="!active" @click="unbindTester(tester)">解绑</n-button>
               </div>
             </div>
             <div v-else-if="!testersLoading" class="empty-state">暂无已绑定的体验者。</div>
@@ -653,13 +653,13 @@ const domainGroups = computed(() => {
                   <n-form-item v-if="qrType === 'unlimited'" label="宽度">
                     <n-input-number v-model:value="qrWidth" :min="280" :max="1280" style="width: 160px" />
                   </n-form-item>
-                  <n-button type="primary" :loading="qrLoading" @click="generateQR">生成二维码</n-button>
+                  <n-button type="primary" :loading="qrLoading" @click="generateQR">生成</n-button>
                 </n-form>
               </div>
               <div class="qr-preview">
                 <div v-if="qrUrl" class="qr-result">
                   <img :src="qrUrl" alt="小程序二维码" class="qr-image" />
-                  <n-button secondary @click="downloadQR">下载图片</n-button>
+                  <n-button @click="downloadQR">下载</n-button>
                 </div>
                 <div v-else class="qr-empty">
                   <n-icon :size="34"><QrCodeOutline /></n-icon>

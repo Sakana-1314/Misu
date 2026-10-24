@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { AppsOutline, HourglassOutline, AddOutline, RefreshOutline, RocketOutline } from '@vicons/ionicons5'
+import { AppsOutline, HourglassOutline, RefreshOutline, RocketOutline } from '@vicons/ionicons5'
 import { api } from '@/api/client'
 import type { Authorizer, DashboardData, Paged, SyncResult } from '@/types/api'
 import StatCard from '@/components/StatCard.vue'
@@ -47,9 +47,6 @@ async function syncNow() {
   }
 }
 
-function addApp() {
-  router.push('/authorizers?add=1')
-}
 </script>
 
 <template>
@@ -58,10 +55,6 @@ function addApp() {
       <n-button :loading="syncing" @click="syncNow">
         <template #icon><n-icon><RefreshOutline /></n-icon></template>
         同步
-      </n-button>
-      <n-button type="primary" @click="addApp">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增小程序
       </n-button>
     </div>
 
@@ -100,10 +93,7 @@ function addApp() {
               <StatusTag kind="authorizer" :value="app.status" />
             </div>
           </div>
-          <div v-else class="empty-state">
-            <div>暂无小程序</div>
-            <n-button type="primary" style="margin-top: 12px" @click="addApp">新增小程序</n-button>
-          </div>
+          <div v-else class="empty-state">暂无小程序</div>
         </div>
       </div>
     </n-spin>
