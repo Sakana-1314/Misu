@@ -31,6 +31,7 @@ type App struct {
 	runner   *service.JobRunner
 	audits   *service.AuditService
 	jobs     *service.JobService
+	mpWeb    *service.MPWebService
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -73,14 +74,15 @@ func New(cfg *config.Config) (*App, error) {
 	dashboard := service.NewDashboardService(db, tokens, cfg)
 	settings := service.NewSettingsService(cfg, db, tokens, logs, log)
 	openPlatform := openplatform.New(cfg)
+	mpWeb := service.NewMPWebService(db, box, logs, log)
 
-	server, err := httpapi.New(cfg, log, db, logs, tokens, auths, templates, assets, audits, jobs, callback, dashboard, settings, openPlatform, wx)
+	server, err := httpapi.New(cfg, log, db, logs, tokens, auths, templates, assets, audits, jobs, callback, dashboard, settings, openPlatform, mpWeb, wx)
 	if err != nil {
 		return nil, err
 	}
 	return &App{
 		Cfg: cfg, Log: log, DB: db, Server: server,
-		logs: logs, callback: callback, runner: runner, audits: audits, jobs: jobs,
+		logs: logs, callback: callback, runner: runner, audits: audits, jobs: jobs, mpWeb: mpWeb,
 	}, nil
 }
 
@@ -88,6 +90,7 @@ func (a *App) Run(ctx context.Context) error {
 	appCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	a.mpWeb.Restore(appCtx)
 	a.logs.Start(appCtx)
 	a.callback.Start(appCtx)
 	a.runner.Start(appCtx)

@@ -33,6 +33,7 @@ type Server struct {
 	dashboard *service.DashboardService
 	settings     *service.SettingsService
 	openplatform *openplatform.Client
+	mpWeb        *service.MPWebService
 	wx           *wechat.Client
 
 	allowedHost   string
@@ -56,6 +57,7 @@ func New(
 	dashboard *service.DashboardService,
 	settings *service.SettingsService,
 	openPlatform *openplatform.Client,
+	mpWeb *service.MPWebService,
 	wx *wechat.Client,
 ) (*Server, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
@@ -81,6 +83,7 @@ func New(
 		dashboard:     dashboard,
 		settings:      settings,
 		openplatform:  openPlatform,
+		mpWeb:         mpWeb,
 		wx:            wx,
 		allowedHost:   parsed.Host,
 		adminHash:     hash,
@@ -115,6 +118,13 @@ func (s *Server) Engine() *gin.Engine {
 		auth.GET("/dashboard", s.getDashboard)
 
 		auth.GET("/authorizers", s.listAuthorizers)
+		auth.GET("/mpweb/status", s.mpWebStatus)
+		auth.POST("/mpweb/login", s.mpWebLoginStart)
+		auth.GET("/mpweb/login/qrcode", s.mpWebLoginQRCode)
+		auth.GET("/mpweb/login/status", s.mpWebLoginStatus)
+		auth.POST("/mpweb/logout", s.mpWebLogout)
+		auth.POST("/mpweb/accounts/refresh", s.mpWebRefreshAccounts)
+		auth.GET("/mpweb/apps/:appid/version", s.mpWebVersion)
 		auth.POST("/authorizers/sync", s.syncAuthorizers)
 		auth.POST("/authorizers/preauth", s.preauth)
 		auth.POST("/authorizers/qrcodes", s.qrcodeZip)

@@ -46,6 +46,7 @@ func Open(cfg *config.Config, log *slog.Logger) (*gorm.DB, error) {
 		&model.Authorizer{},
 		&model.CodeTemplate{},
 		&model.AuditAsset{},
+		&model.MPWebSession{},
 		&model.AuditRecord{},
 		&model.ReleaseRecord{},
 		&model.Job{},

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, type Component } from 'vue'
 import { NIcon } from 'naive-ui'
-import { AppsOutline, CodeSlashOutline, DocumentTextOutline, GridOutline } from '@vicons/ionicons5'
+import { AppsOutline, CodeSlashOutline, DocumentTextOutline, GridOutline, LinkOutline } from '@vicons/ionicons5'
 
 defineProps<{ activeKey: string; collapsed?: boolean }>()
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
@@ -12,6 +12,7 @@ const menuOptions = [
   { label: '仪表盘', key: 'dashboard', icon: renderIcon(GridOutline) },
   { label: '小程序', key: 'authorizers', icon: renderIcon(AppsOutline) },
   { label: '代码模板', key: 'templates', icon: renderIcon(CodeSlashOutline) },
+  { label: '网页版连接', key: 'connect', icon: renderIcon(LinkOutline) },
   { label: '操作日志', key: 'logs', icon: renderIcon(DocumentTextOutline) },
 ]
 </script>
