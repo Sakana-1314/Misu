@@ -20,7 +20,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
-const status = ref<string | null>(null)
+const status = ref<string | null>('active')
 const loading = ref(false)
 const syncing = ref(false)
 const checkedKeys = ref<string[]>([])
@@ -173,6 +173,8 @@ const statusOptions = [
   { label: '已授权', value: 'active' },
   { label: '已取消授权', value: 'unauthorized' },
 ]
+
+const showEmpty = computed(() => !loading.value && items.value.length === 0 && !keyword.value && status.value === 'active')
 </script>
 
 <template>
@@ -231,7 +233,7 @@ const statusOptions = [
         </div>
       </transition>
 
-      <div v-if="!loading && items.length === 0 && !keyword && !status" class="surface-card empty-state">暂无小程序</div>
+      <div v-if="showEmpty" class="surface-card empty-state">暂无小程序</div>
 
       <n-data-table
         v-else
@@ -268,9 +270,8 @@ const statusOptions = [
   justify-content: space-between;
   gap: 16px;
   padding: 10px 14px;
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 92%, #2563eb 8%);
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
   flex-wrap: wrap;
 }
 

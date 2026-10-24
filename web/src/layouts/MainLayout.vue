@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDialog } from 'naive-ui'
+import { NIcon, useDialog } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
-import { ChevronDownOutline, LogOutOutline, MenuOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
+import {
+  ChevronDownOutline,
+  LogOutOutline,
+  MenuOutline,
+  MoonOutline,
+  ChevronBackOutline,
+  ChevronForwardOutline,
+  SunnyOutline,
+} from '@vicons/ionicons5'
 import SideMenu from './SideMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -16,6 +24,8 @@ const themeStore = useThemeStore()
 
 const mobileOpen = ref(false)
 const isMobile = ref(window.innerWidth < 980)
+const collapsed = ref(localStorage.getItem('misu.sidebar.collapsed') === '1')
+const sidebarWidth = computed(() => (collapsed.value ? 64 : 208))
 
 const activeKey = computed(() => {
   const name = String(route.name || '')
@@ -27,10 +37,13 @@ const pageTitle = computed(() => (route.meta.title as string) || '控制台')
 const username = computed(() => auth.state.admin?.username || 'admin')
 
 const userOptions: DropdownOption[] = [
-  { label: username.value, key: 'name', disabled: true },
-  { type: 'divider', key: 'divider' },
-  { label: '退出登录', key: 'logout', icon: () => h(LogOutOutline) },
+  { key: 'logout', label: '退出登录', icon: () => h(NIcon, null, { default: () => h(LogOutOutline) }) },
 ]
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+  localStorage.setItem('misu.sidebar.collapsed', collapsed.value ? '1' : '0')
+}
 
 function handleMenuSelect(key: string) {
   mobileOpen.value = false
@@ -69,21 +82,29 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="layout">
-    <aside v-if="!isMobile" class="sidebar">
-      <SideMenu :active-key="activeKey" @select="handleMenuSelect" />
+    <aside v-if="!isMobile" class="sidebar" :style="{ width: `${sidebarWidth}px` }">
+      <SideMenu :active-key="activeKey" :collapsed="collapsed" @select="handleMenuSelect" />
     </aside>
 
-    <n-drawer v-model:show="mobileOpen" placement="left" :width="280">
+    <n-drawer v-model:show="mobileOpen" placement="left" :width="220">
       <n-drawer-content body-content-style="padding:0">
         <SideMenu :active-key="activeKey" @select="handleMenuSelect" />
       </n-drawer-content>
     </n-drawer>
 
-    <div class="main" :class="{ 'is-mobile': isMobile }">
+    <div class="main" :class="{ 'is-mobile': isMobile }" :style="{ marginLeft: isMobile ? '0' : `${sidebarWidth}px` }">
       <header class="topbar">
         <div class="left">
           <n-button v-if="isMobile" circle class="icon-button" @click="mobileOpen = true">
             <template #icon><n-icon><MenuOutline /></n-icon></template>
+          </n-button>
+          <n-button v-else circle class="icon-button" :title="collapsed ? '展开导航' : '收起导航'" @click="toggleCollapsed">
+            <template #icon>
+              <n-icon>
+                <ChevronForwardOutline v-if="collapsed" />
+                <ChevronBackOutline v-else />
+              </n-icon>
+            </template>
           </n-button>
           <div class="title">{{ pageTitle }}</div>
         </div>
@@ -96,13 +117,11 @@ onBeforeUnmount(() => {
               </n-icon>
             </template>
           </n-button>
-          <n-dropdown :options="userOptions" trigger="click" @select="handleUserSelect">
-            <button class="user-button">
-              <n-avatar round :size="28" color="#2563EB">
-                {{ username.slice(0, 1).toUpperCase() }}
-              </n-avatar>
-              <span class="username">{{ username }}</span>
-              <n-icon class="chevron"><ChevronDownOutline /></n-icon>
+          <n-dropdown :options="userOptions" trigger="click" placement="bottom-end" @select="handleUserSelect">
+            <button class="account-button" type="button">
+              <n-avatar round :size="26" color="#2563EB">{{ username.slice(0, 1).toUpperCase() }}</n-avatar>
+              <span class="account-name">{{ username }}</span>
+              <n-icon class="account-chevron"><ChevronDownOutline /></n-icon>
             </button>
           </n-dropdown>
         </div>
@@ -129,46 +148,40 @@ onBeforeUnmount(() => {
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 236px;
-  border-right: 1px solid var(--border);
   z-index: 20;
+  transition: width 0.18s ease;
 }
 
 .main {
-  margin-left: 236px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-}
-
-.main.is-mobile {
-  margin-left: 0;
+  transition: margin-left 0.18s ease;
 }
 
 .topbar {
   position: sticky;
   top: 0;
   z-index: 15;
-  height: 64px;
-  padding: 0 24px;
+  height: 54px;
+  padding: 0 18px 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--page-bg) 86%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 .left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -179,61 +192,62 @@ onBeforeUnmount(() => {
 .right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex: none;
 }
 
-.user-button {
+.account-button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 4px;
-  border: 1px solid var(--border);
+  gap: 7px;
+  padding: 3px 8px 3px 3px;
+  border: none;
   border-radius: 999px;
-  background: var(--surface);
-  cursor: pointer;
+  background: transparent;
   color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.user-button:hover {
+.account-button:hover {
   background: var(--surface-soft);
 }
 
-.username {
+.account-name {
   font-size: 13px;
   font-weight: 560;
-  max-width: 120px;
+  max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chevron {
+.account-chevron {
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .content {
-  padding: 22px;
+  padding: 16px 18px 24px;
   flex: 1;
 }
 
 @media (max-width: 768px) {
   .topbar {
-    padding: 0 16px;
-    height: 60px;
+    padding: 0 12px;
+    height: 52px;
   }
 
   .content {
-    padding: 16px;
+    padding: 12px;
   }
 
-  .username,
-  .chevron {
+  .account-name,
+  .account-chevron {
     display: none;
   }
 
-  .user-button {
+  .account-button {
     padding: 3px;
   }
 }

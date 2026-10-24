@@ -21,7 +21,7 @@ async function load() {
   try {
     const [dashboardResult, appsResult] = await Promise.allSettled([
       api.get<DashboardData>('/dashboard'),
-      api.get<Paged<Authorizer>>('/authorizers', { params: { page: 1, page_size: 5 } }),
+      api.get<Paged<Authorizer>>('/authorizers', { params: { page: 1, page_size: 5, status: 'active' } }),
     ])
     if (dashboardResult.status === 'fulfilled') data.value = dashboardResult.value
     if (appsResult.status === 'fulfilled') apps.value = appsResult.value.items || []
@@ -61,9 +61,6 @@ async function syncNow() {
     <n-spin :show="loading">
       <div class="stack-16">
         <n-alert v-if="data && !data.wechat_configured" type="error" :bordered="false">平台未连接</n-alert>
-        <n-alert v-else-if="data && !data.platform_published" type="warning" :bordered="false">
-          当前为测试模式，仅授权测试列表内的小程序可用。
-        </n-alert>
 
         <div class="stat-grid">
           <StatCard label="小程序" :value="stats?.authorizers ?? 0" tone="primary">
@@ -108,14 +105,14 @@ async function syncNow() {
 }
 
 .app-card {
-  padding: 6px 18px 10px;
+  padding: 4px 14px 8px;
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0 8px;
+  padding: 12px 0 6px;
   font-size: 14px;
   font-weight: 650;
 }

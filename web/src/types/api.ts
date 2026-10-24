@@ -52,7 +52,6 @@ export interface AuditRecord {
   submit_audit_time: string | null
   submitted_at: string | null
   last_checked_at: string | null
-  profile_id: number | null
   auto_release: boolean
   auto_release_job_id: number | null
   created_at: string
@@ -109,20 +108,6 @@ export interface AuditItem {
   second_id: number
   third_id?: number
   title?: string
-}
-
-export interface AuditProfile {
-  id: number
-  name: string
-  item_list: AuditItem[] | null
-  version_desc: string
-  feedback_info: string
-  feedback_stuff: string
-  ugc_declare: any
-  preview_info: any
-  is_default: boolean
-  created_at: string
-  updated_at: string
 }
 
 export interface Job {

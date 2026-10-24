@@ -43,12 +43,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '代码模板' },
       },
       {
-        path: 'audit-profiles',
-        name: 'audit-profiles',
-        component: () => import('@/views/AuditProfilesView.vue'),
-        meta: { title: '审核配置' },
-      },
-      {
         path: 'logs',
         name: 'logs',
         component: () => import('@/views/LogsView.vue'),

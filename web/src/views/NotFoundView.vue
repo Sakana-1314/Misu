@@ -30,14 +30,14 @@ const router = useRouter()
 
 .card {
   width: min(440px, 100%);
-  padding: 44px 36px;
+  padding: 38px 30px;
   text-align: center;
 }
 
 .logo {
   width: 46px;
   height: 46px;
-  border-radius: 13px;
+  border-radius: var(--radius-md);
 }
 
 .code {

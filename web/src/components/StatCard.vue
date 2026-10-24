@@ -28,8 +28,8 @@ const toneClass: Record<string, string> = {
 
 <style scoped>
 .stat-card {
-  padding: 18px 20px;
-  min-height: 112px;
+  padding: 14px 16px;
+  min-height: 96px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -42,9 +42,9 @@ const toneClass: Record<string, string> = {
 }
 
 .icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -68,6 +68,6 @@ const toneClass: Record<string, string> = {
 }
 
 .metric-value {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 </style>

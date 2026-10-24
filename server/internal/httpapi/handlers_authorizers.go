@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ import (
 	"misu/internal/service"
 	"misu/internal/wechat"
 )
+
+var appIDPattern = regexp.MustCompile(`^wx[0-9a-f]{16}$`)
 
 func (s *Server) listAuthorizers(c *gin.Context) {
 	page, size := pageParams(c)
@@ -46,6 +49,22 @@ func (s *Server) preauth(c *gin.Context) {
 		s.respondServiceError(c, service.ErrUnconfigured)
 		return
 	}
+	var req struct {
+		AppID string `json:"appid"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "BAD_REQUEST", "请填写小程序 AppID")
+		return
+	}
+	appid := strings.ToLower(strings.TrimSpace(req.AppID))
+	if !appIDPattern.MatchString(appid) {
+		fail(c, http.StatusBadRequest, "BAD_REQUEST", "AppID 格式不正确")
+		return
+	}
+	if err := s.openplatform.AddTestAppID(c.Request.Context(), appid); err != nil {
+		s.respondServiceError(c, err)
+		return
+	}
 	componentToken, err := s.tokens.GetComponent(c.Request.Context())
 	if err != nil {
 		s.respondServiceError(c, err)
@@ -61,6 +80,7 @@ func (s *Server) preauth(c *gin.Context) {
 		"iss":     "misu",
 		"sub":     adminName(c),
 		"purpose": "wechat_auth",
+		"appid":   appid,
 		"nonce":   uuid.NewString(),
 		"iat":     now.Unix(),
 		"exp":     now.Add(15 * time.Minute).Unix(),
@@ -81,7 +101,7 @@ func (s *Server) preauth(c *gin.Context) {
 	if expiresIn <= 0 {
 		expiresIn = 600
 	}
-	s.logs.Operation(adminName(c), "preauth_create", "", nil, clientIP(c))
+	s.logs.Operation(adminName(c), "preauth_create", appid, map[string]any{"appid": appid}, clientIP(c))
 	ok(c, gin.H{
 		"auth_url":     authURL,
 		"redirect_uri": redirectURI,
@@ -387,12 +407,7 @@ func (s *Server) authorizerMedia(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-func (s *Server) uploadAuditMedia(c *gin.Context) {
-	appid := c.Query("appid")
-	if appid == "" {
-		fail(c, http.StatusBadRequest, "BAD_REQUEST", "缺少 appid")
-		return
-	}
+func (s *Server) uploadAuditAsset(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 10<<20)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -407,23 +422,37 @@ func (s *Server) uploadAuditMedia(c *gin.Context) {
 	}
 	filename := header.Filename
 	if filename == "" {
-		filename = "media.png"
+		filename = "material"
 	}
-	var mediaID, mediaType string
-	err = s.auths.CallWithToken(c.Request.Context(), appid, func(token string) error {
-		resp, err := s.wx.UploadAuditMedia(c.Request.Context(), appid, token, filename, data)
-		if err == nil {
-			mediaID = resp.MediaID
-			mediaType = resp.Type
-		}
-		return err
-	})
+	mime := header.Header.Get("Content-Type")
+	if mime == "" {
+		mime = http.DetectContentType(data)
+	}
+	asset, err := s.assets.Create(c.Request.Context(), filename, mime, data)
 	if err != nil {
 		s.respondServiceError(c, err)
 		return
 	}
-	s.logs.Operation(adminName(c), "audit_media_upload", appid, map[string]any{"filename": filename, "type": mediaType}, clientIP(c))
-	ok(c, gin.H{"media_id": mediaID, "type": mediaType})
+	ok(c, gin.H{"id": asset.ID, "filename": asset.Filename, "mime": asset.Mime, "size": asset.Size})
+}
+
+func (s *Server) getAuditAsset(c *gin.Context) {
+	id, valid := parseUintParam(c, "id")
+	if !valid {
+		return
+	}
+	asset, err := s.assets.Get(c.Request.Context(), id)
+	if err != nil {
+		s.respondServiceError(c, err)
+		return
+	}
+	contentType := asset.Mime
+	if contentType == "" {
+		contentType = http.DetectContentType(asset.Data)
+	}
+	c.Header("Cache-Control", "private, max-age=600")
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", asset.Filename))
+	c.Data(http.StatusOK, contentType, asset.Data)
 }
 
 func (s *Server) qrcodeZip(c *gin.Context) {

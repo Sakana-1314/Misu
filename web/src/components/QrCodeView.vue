@@ -41,7 +41,7 @@ watch(() => [props.value, props.size], render, { immediate: true })
 <style scoped>
 .qr {
   display: block;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .qr-fallback {
@@ -51,6 +51,6 @@ watch(() => [props.value, props.size], render, { immediate: true })
   color: #6b7280;
   font-size: 13px;
   background: #fff;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 </style>

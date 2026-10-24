@@ -1,23 +1,30 @@
 :root {
   --primary: #2563eb;
   --primary-dark: #1d4ed8;
-  --page-bg: #f4f6f9;
+  --primary-soft: #eaf0fe;
+  --page-bg: #f2f4f8;
   --surface: #ffffff;
-  --surface-soft: #f7f9fc;
-  --border: #e8edf3;
+  --surface-soft: #f4f6fa;
+  --surface-hover: #eef2f8;
+  --border: #e6eaf1;
   --text: #172033;
   --text-muted: #6b7789;
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 html.dark {
+  --primary-soft: #1b2740;
   --page-bg: #0d1119;
   --surface: #151b26;
   --surface-soft: #1a2230;
+  --surface-hover: #202a3a;
   --border: #273244;
   --text: #e8edf5;
   --text-muted: #98a5b8;
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 * {
@@ -50,13 +57,13 @@ a:hover {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(127, 138, 152, 0.3);
-  border-radius: 8px;
+  background: rgba(127, 138, 152, 0.26);
+  border-radius: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -68,17 +75,18 @@ a:hover {
   margin: 0 auto;
 }
 
+/* Cards separate regions by background, not by outlines. */
 .surface-card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: none;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
 }
 
 .surface-soft {
   background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: none;
+  border-radius: var(--radius-md);
 }
 
 .text-muted {
@@ -117,7 +125,7 @@ a:hover {
 }
 
 .empty-state {
-  padding: 52px 20px;
+  padding: 40px 20px;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
@@ -129,7 +137,7 @@ a:hover {
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .page-toolbar .left-actions {
@@ -143,7 +151,7 @@ a:hover {
 .inline-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -185,14 +193,10 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--border);
+  padding: 11px 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease;
-}
-
-.list-row:last-child {
-  border-bottom: none;
 }
 
 .list-row:hover {
@@ -238,13 +242,13 @@ a:hover {
 .stack-12 {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .stack-16 {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .row-between {
@@ -255,7 +259,7 @@ a:hover {
 }
 
 .metric-value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 650;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -263,10 +267,29 @@ a:hover {
 
 .qr-frame {
   display: inline-flex;
-  padding: 14px;
-  border-radius: 14px;
+  padding: 12px;
+  border-radius: var(--radius-md);
   background: #fff;
-  border: 1px solid var(--border);
+}
+
+/* Tables: light separators instead of a full grid. */
+.n-data-table .n-data-table-th {
+  background: var(--surface-soft) !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.n-data-table .n-data-table-td {
+  border-bottom: 1px solid var(--border);
+}
+
+.n-data-table .n-data-table-tr:last-child .n-data-table-td {
+  border-bottom: none;
+}
+
+.n-data-table .n-data-table-tr:hover .n-data-table-td {
+  background: var(--surface-soft);
 }
 
 @media (max-width: 768px) {
@@ -275,7 +298,7 @@ a:hover {
   }
 
   .metric-value {
-    font-size: 24px;
+    font-size: 22px;
   }
 }
 
@@ -287,8 +310,8 @@ button.n-button:not(.icon-button):not(.block-button) {
 }
 
 button.n-button.icon-button {
-  width: 34px;
-  min-width: 34px;
+  width: 32px;
+  min-width: 32px;
   padding: 0;
 }
 

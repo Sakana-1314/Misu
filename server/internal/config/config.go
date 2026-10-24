@@ -37,6 +37,11 @@ type Config struct {
 	PlatformPublished bool
 	EgressIP          string
 
+	// Open platform console credentials. Used only when the platform is not yet
+	// published, to keep the authorization test whitelist in sync.
+	OpenPlatformAccount  string
+	OpenPlatformPassword string
+
 	JobConcurrency    int
 	WXMaxQPS          int
 	WXTimeout         time.Duration
@@ -71,6 +76,8 @@ func Load() (*Config, error) {
 		ComponentAESKeyPrev:   strings.TrimSpace(os.Getenv("WX_COMPONENT_ENCODING_AES_KEY_PREVIOUS")),
 		PlatformPublished:     envBool("PLATFORM_PUBLISHED", false),
 		EgressIP:              env("EGRESS_IP", ""),
+		OpenPlatformAccount:   env("OPEN_PLATFORM_ACCOUNT", ""),
+		OpenPlatformPassword:  env("OPEN_PLATFORM_PASSWORD", ""),
 		JobConcurrency:        envInt("JOB_CONCURRENCY", 3),
 		WXMaxQPS:              envInt("WX_MAX_QPS", 8),
 		WXTimeout:             time.Duration(envInt("WX_REQUEST_TIMEOUT_SECONDS", 20)) * time.Second,
@@ -115,6 +122,10 @@ func Load() (*Config, error) {
 
 func (c *Config) WeChatConfigured() bool {
 	return c.ComponentAppID != "" && c.ComponentAppSecret != "" && c.ComponentAESKey != "" && c.ComponentVerifyToken != ""
+}
+
+func (c *Config) OpenPlatformConfigured() bool {
+	return c.OpenPlatformAccount != "" && c.OpenPlatformPassword != ""
 }
 
 func env(key, def string) string {

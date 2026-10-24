@@ -97,6 +97,11 @@ func cleanupWorker(ctx context.Context, cfg *config.Config, audits *AuditService
 			if res := db.Where("usage_date < ?", quotaCutoff).Delete(&model.UndoQuotaUsage{}); res.Error != nil {
 				log.Warn("failed to clean undo quota", "error", res.Error)
 			}
+			// Audit materials are only needed until WeChat accepts the submission.
+			assetCutoff := time.Now().AddDate(0, 0, -7)
+			if res := db.Where("created_at < ?", assetCutoff).Delete(&model.AuditAsset{}); res.Error != nil {
+				log.Warn("failed to clean audit assets", "error", res.Error)
+			}
 		}
 	}
 }

@@ -152,12 +152,12 @@ onMounted(() => {
 
 <style scoped>
 .tab-card {
-  padding: 8px 20px 20px;
+  padding: 4px 14px 14px;
 }
 
 @media (max-width: 720px) {
   .tab-card {
-    padding: 6px 12px 16px;
+    padding: 4px 10px 12px;
   }
 }
 </style>
