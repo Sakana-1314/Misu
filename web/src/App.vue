@@ -34,6 +34,13 @@ const themeOverrides: GlobalThemeOverrides = {
   DataTable: { borderRadius: '8px', thColor: '#f4f6fa', tdColorHover: '#f7f9fc' },
   Dropdown: { borderRadius: '8px' },
   Modal: { borderRadius: '10px' },
+  Tabs: {
+    tabFontWeightActive: '600',
+    tabTextColorActiveLine: '#172033',
+    tabTextColorHoverLine: '#172033',
+    tabTextColorLine: '#6b7789',
+    barColor: '#2563EB',
+  },
 }
 
 const darkOverrides: GlobalThemeOverrides = {
@@ -45,6 +52,11 @@ const darkOverrides: GlobalThemeOverrides = {
     popoverColor: '#151b26',
   },
   DataTable: { thColor: '#1a2230', tdColorHover: '#1a2230' },
+  Tabs: {
+    tabTextColorActiveLine: '#e8edf5',
+    tabTextColorHoverLine: '#e8edf5',
+    tabTextColorLine: '#98a5b8',
+  },
 }
 
 const mergedOverrides = computed<GlobalThemeOverrides>(() =>
