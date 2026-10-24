@@ -289,15 +289,12 @@ func (c *Client) Profile(ctx context.Context) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.cgi(ctx, session, nil, "getNavInfo")
-	if err != nil {
+	profile := &Profile{Token: session.token}
+	// The console header only exposes the operator identity on the home page,
+	// so read it from there; nav info is fetched to confirm the session works.
+	if _, err := c.cgi(ctx, session, nil, "getNavInfo"); err != nil {
 		return nil, err
 	}
-	var payload struct {
-		NickName string `json:"nick_name"`
-	}
-	_ = json.Unmarshal(body, &payload)
-	profile := &Profile{Token: session.token}
 	// Console header data carries the operator identity; fall back to a page fetch.
 	if html, err := session.get(ctx, fmt.Sprintf("%s/cgi-bin/home?t=home/index&lang=zh_CN&token=%s", baseURL, session.token), nil); err == nil {
 		if m := regexp.MustCompile(`"nick_name_decode":"([^"]*)"`).FindSubmatch(html); len(m) > 1 {
