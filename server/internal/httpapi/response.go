@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"misu/internal/mpweb"
 	"misu/internal/service"
 	"misu/internal/wechat"
 )
@@ -33,6 +34,7 @@ func failData(c *gin.Context, status int, code, message string, data any) {
 
 func (s *Server) respondError(c *gin.Context, err error) {
 	var apiErr *wechat.APIError
+	var mpErr *mpweb.Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		fail(c, http.StatusNotFound, "NOT_FOUND", "记录不存在")
@@ -41,6 +43,10 @@ func (s *Server) respondError(c *gin.Context, err error) {
 			"errcode":  apiErr.Code,
 			"endpoint": apiErr.Endpoint,
 		})
+	case errors.Is(err, mpweb.ErrNotLoggedIn), errors.Is(err, mpweb.ErrNoPendingLogin):
+		fail(c, http.StatusConflict, "MPWEB_LOGIN_REQUIRED", err.Error())
+	case errors.As(err, &mpErr):
+		failData(c, http.StatusBadGateway, "MPWEB_ERROR", mpErr.Msg, gin.H{"ret": mpErr.Ret})
 	case errors.Is(err, service.ErrUnconfigured):
 		fail(c, http.StatusConflict, "WECHAT_UNCONFIGURED", err.Error())
 	case errors.Is(err, service.ErrNoTicket):

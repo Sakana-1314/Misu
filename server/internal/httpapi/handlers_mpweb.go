@@ -11,12 +11,17 @@ func (s *Server) mpWebStatus(c *gin.Context) {
 }
 
 func (s *Server) mpWebLoginStart(c *gin.Context) {
-	state, _, err := s.mpWeb.StartLogin(c.Request.Context(), adminName(c), clientIP(c))
+	state, err := s.mpWeb.StartLogin(c.Request.Context(), adminName(c), clientIP(c))
 	if err != nil {
 		s.respondServiceError(c, err)
 		return
 	}
 	ok(c, state)
+}
+
+func (s *Server) mpWebLoginCancel(c *gin.Context) {
+	s.mpWeb.CancelLogin()
+	ok(c, gin.H{"ok": true})
 }
 
 func (s *Server) mpWebLoginQRCode(c *gin.Context) {
@@ -30,7 +35,7 @@ func (s *Server) mpWebLoginQRCode(c *gin.Context) {
 }
 
 func (s *Server) mpWebLoginStatus(c *gin.Context) {
-	state, err := s.mpWeb.PollLogin(c.Request.Context())
+	state, err := s.mpWeb.PollLogin(c.Request.Context(), adminName(c), clientIP(c))
 	if err != nil {
 		s.respondServiceError(c, err)
 		return
@@ -56,7 +61,7 @@ func (s *Server) mpWebRefreshAccounts(c *gin.Context) {
 }
 
 func (s *Server) mpWebVersion(c *gin.Context) {
-	version, err := s.mpWeb.Version(c.Request.Context(), c.Param("appid"))
+	version, err := s.mpWeb.Version(c.Request.Context(), c.Param("username"))
 	if err != nil {
 		s.respondServiceError(c, err)
 		return
