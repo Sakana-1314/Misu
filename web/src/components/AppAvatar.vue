@@ -28,7 +28,7 @@ const fallback = computed(() => {
 </script>
 
 <template>
-  <n-avatar round :size="size" :src="src || undefined" :color="color" :style="{ fontSize: `${Math.max(12, size * 0.38)}px` }">
+  <n-avatar round :size="size" :src="src || undefined" :img-props="{ referrerpolicy: 'no-referrer' }" :color="color" :style="{ fontSize: `${Math.max(12, size * 0.38)}px` }">
     {{ fallback }}
   </n-avatar>
 </template>

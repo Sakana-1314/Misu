@@ -4,24 +4,33 @@ export interface JobTypeOption {
   value: string
   label: string
   description: string
+  group: 'release' | 'manage' | 'check'
   dangerous?: boolean
+  // Hidden from batch menus; still used to label existing jobs.
+  hidden?: boolean
 }
 
 export const jobTypeOptions: JobTypeOption[] = [
-  { value: 'commit', label: '上传', description: '将代码模板上传到小程序并生成体验版' },
-  { value: 'submit_audit', label: '提审', description: '按审核配置提交代码审核' },
-  { value: 'release', label: '发布', description: '发布已通过审核的版本', dangerous: true },
-  { value: 'undo_audit', label: '撤回', description: '撤回正在审核的版本', dangerous: true },
-  { value: 'rollback', label: '回退', description: '回退到上一版本或指定历史版本', dangerous: true },
-  { value: 'gray_release', label: '灰度', description: '按比例灰度发布新版本', dangerous: true },
-  { value: 'cancel_gray_release', label: '取消灰度', description: '取消当前分阶段发布', dangerous: true },
-  { value: 'modify_domain', label: '域名', description: '添加、覆盖或删除小程序服务器域名', dangerous: true },
-  { value: 'bind_tester', label: '绑定', description: '为多个小程序绑定同一个微信号' },
-  { value: 'unbind_tester', label: '解绑', description: '按 userstr 解绑体验者', dangerous: true },
-  { value: 'set_visit_status', label: '状态', description: '开启或暂停小程序服务', dangerous: true },
-  { value: 'set_support_version', label: '基础库', description: '设置小程序最低基础库版本' },
-  { value: 'preflight', label: '预检', description: '批量检查审核状态、隐私接口、类目和域名' },
+  { value: 'commit', label: '上传代码', description: '把模板库中的代码上传到小程序，生成新的体验版', group: 'release' },
+  { value: 'submit_audit', label: '提交审核', description: '把体验版提交给微信审核，通过后才能发布', group: 'release' },
+  { value: 'release', label: '发布上线', description: '把已通过审核的版本发布给所有用户', group: 'release', dangerous: true },
+  { value: 'gray_release', label: '分阶段发布', description: '先让一部分用户用上新版本，确认无误后再全量', group: 'release', dangerous: true },
+  { value: 'cancel_gray_release', label: '停止分阶段发布', description: '停止正在进行的分阶段发布', group: 'release', dangerous: true },
+  { value: 'undo_audit', label: '撤回审核', description: '撤回正在审核中的版本，每天有次数限制', group: 'release', dangerous: true },
+  { value: 'rollback', label: '版本回退', description: '把线上版本退回到之前发布过的版本', group: 'release', dangerous: true },
+  { value: 'modify_domain', label: '服务器域名', description: '添加、替换或删除小程序可访问的服务器域名', group: 'manage', dangerous: true },
+  { value: 'bind_tester', label: '添加体验成员', description: '让指定微信号可以打开体验版', group: 'manage' },
+  { value: 'unbind_tester', label: '移除体验成员', description: '移除体验成员', group: 'manage', dangerous: true, hidden: true },
+  { value: 'set_visit_status', label: '暂停 / 恢复服务', description: '暂停后用户将无法打开小程序', group: 'manage', dangerous: true },
+  { value: 'set_support_version', label: '最低基础库版本', description: '低于该版本的微信将提示用户升级', group: 'manage' },
+  { value: 'preflight', label: '提审前检查', description: '检查类目、域名、隐私接口和审核状态，提前发现问题', group: 'check' },
 ]
+
+export const jobGroupLabels: Record<JobTypeOption['group'], string> = {
+  release: '版本发布',
+  manage: '小程序设置',
+  check: '检查',
+}
 
 export const jobTypeLabels: Record<string, string> = Object.fromEntries(jobTypeOptions.map((item) => [item.value, item.label]))
 
@@ -45,7 +54,7 @@ export const itemStatusMeta: Record<string, { label: string; type: NTagType }> =
 
 export const auditStatusMeta: Record<number, { label: string; type: NTagType }> = {
   0: { label: '审核通过', type: 'primary' },
-  1: { label: '审核驳回', type: 'error' },
+  1: { label: '未通过', type: 'error' },
   2: { label: '审核中', type: 'info' },
   3: { label: '已撤回', type: 'default' },
   4: { label: '审核延后', type: 'warning' },
@@ -60,13 +69,13 @@ export const accountStatusMeta: Record<number, { label: string; type: NTagType }
 }
 
 export const authorizerStatusMeta: Record<string, { label: string; type: NTagType }> = {
-  active: { label: '已授权', type: 'primary' },
+  active: { label: '已接入', type: 'primary' },
   unauthorized: { label: '已取消授权', type: 'default' },
 }
 
 export const permissionNames: Record<number, string> = {
   17: '获取小程序码',
-  18: '小程序开发与数据分析',
+  18: '代码管理与数据分析',
   25: '开放平台账号管理',
   30: '小程序基本信息管理',
   31: '小程序认证名称检测',
@@ -101,21 +110,24 @@ export const operationActionLabels: Record<string, string> = {
   tester_unbind: '解绑体验者',
   qrcode_zip: '批量生成二维码',
   audit_media_upload: '上传提审素材',
+  mpweb_login_start: '发起公众平台扫码登录',
+  mpweb_login_success: '公众平台扫码登录成功',
+  mpweb_logout: '断开公众平台连接',
 }
 
 export const domainActions = [
-  { label: '添加（保留已有）', value: 'add', hint: '在现有域名基础上追加' },
-  { label: '覆盖（危险）', value: 'set', hint: '用本次列表覆盖现有域名' },
-  { label: '删除', value: 'delete', hint: '从现有域名中删除本次列表' },
+  { label: '追加', value: 'add', hint: '保留现有域名，把下面填写的加进去' },
+  { label: '替换', value: 'set', hint: '用下面填写的内容整体替换，未填写的类型会被清空' },
+  { label: '删除', value: 'delete', hint: '从现有域名中删掉下面填写的这些' },
 ]
 
 export const domainFields = [
-  { key: 'requestdomain', label: 'request 合法域名', placeholder: 'https://api.example.com' },
-  { key: 'wsrequestdomain', label: 'socket 合法域名', placeholder: 'wss://ws.example.com' },
-  { key: 'uploaddomain', label: 'uploadFile 合法域名', placeholder: 'https://upload.example.com' },
-  { key: 'downloaddomain', label: 'downloadFile 合法域名', placeholder: 'https://download.example.com' },
-  { key: 'udpdomain', label: 'UDP 合法域名', placeholder: 'udp.example.com:9000' },
-  { key: 'tcpdomain', label: 'TCP 合法域名', placeholder: 'tcp.example.com:9000' },
+  { key: 'requestdomain', label: '接口请求', api: 'request', placeholder: 'https://api.example.com' },
+  { key: 'wsrequestdomain', label: '实时通信', api: 'socket', placeholder: 'wss://ws.example.com' },
+  { key: 'uploaddomain', label: '文件上传', api: 'uploadFile', placeholder: 'https://upload.example.com' },
+  { key: 'downloaddomain', label: '文件下载', api: 'downloadFile', placeholder: 'https://cdn.example.com' },
+  { key: 'udpdomain', label: 'UDP 通信', api: 'UDP', placeholder: 'udp.example.com:9000' },
+  { key: 'tcpdomain', label: 'TCP 通信', api: 'TCP', placeholder: 'tcp.example.com:9000' },
 ] as const
 
 export const grayPlanStatusLabels: Record<number, string> = {

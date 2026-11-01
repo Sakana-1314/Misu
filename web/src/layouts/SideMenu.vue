@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, type Component } from 'vue'
 import { NIcon } from 'naive-ui'
-import { AppsOutline, CodeSlashOutline, DocumentTextOutline, GridOutline, LinkOutline } from '@vicons/ionicons5'
+import { AppsOutline, CodeSlashOutline, DocumentTextOutline, GridOutline, LayersOutline, QrCodeOutline } from '@vicons/ionicons5'
 
 defineProps<{ activeKey: string; collapsed?: boolean }>()
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
@@ -9,10 +9,12 @@ const emit = defineEmits<{ (e: 'select', key: string): void }>()
 const renderIcon = (icon: Component) => () => h(NIcon, null, { default: () => h(icon) })
 
 const menuOptions = [
-  { label: '仪表盘', key: 'dashboard', icon: renderIcon(GridOutline) },
+  { label: '概览', key: 'dashboard', icon: renderIcon(GridOutline) },
   { label: '小程序', key: 'authorizers', icon: renderIcon(AppsOutline) },
   { label: '代码模板', key: 'templates', icon: renderIcon(CodeSlashOutline) },
-  { label: '网页版连接', key: 'connect', icon: renderIcon(LinkOutline) },
+  { label: '任务中心', key: 'jobs', icon: renderIcon(LayersOutline) },
+  { type: 'divider', key: 'divider' },
+  { label: '公众平台连接', key: 'connect', icon: renderIcon(QrCodeOutline) },
   { label: '操作日志', key: 'logs', icon: renderIcon(DocumentTextOutline) },
 ]
 </script>
@@ -86,7 +88,12 @@ const menuOptions = [
 }
 
 :deep(.n-menu-item-content) {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+}
+
+:deep(.n-menu .n-menu-divider) {
+  margin: 8px 12px;
+  background: var(--border);
 }
 
 :deep(.n-menu-item-content--selected) {
