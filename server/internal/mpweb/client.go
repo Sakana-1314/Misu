@@ -273,8 +273,8 @@ func (c *Client) finishLogin(ctx context.Context, session *Session) (*ScanState,
 	session.state = ScanState{Status: StatusConfirmed}
 	session.mu.Unlock()
 
-	// Read the logged-in account from the landing page.
-	if profile, err := c.loadProfile(ctx, session, payload.RedirectURL); err == nil {
+	// Read the logged-in account from its landing page.
+	if profile, err := c.loadProfile(ctx, session); err == nil {
 		session.mu.Lock()
 		session.profile = *profile
 		session.state.NickName = profile.NickName
@@ -363,18 +363,43 @@ type Profile struct {
 	NickName string `json:"nick_name"`
 	Avatar   string `json:"avatar"`
 	UserName string `json:"user_name"`
+	AppID    string `json:"appid,omitempty"`
 	Uin      string `json:"uin"`
 }
 
 var (
-	nickPattern     = regexp.MustCompile(`(?:nick_name|nickname)["']?\s*[:=]\s*["']([^"']+)["']`)
-	headPattern     = regexp.MustCompile(`(?:head_img|headimgurl|head_img_url)["']?\s*[:=]\s*["']([^"']+)["']`)
-	userNamePattern = regexp.MustCompile(`["']?(?:user_name|username)["']?\s*[:=]\s*["'](gh_[0-9a-f]+)["']`)
-	uinPattern      = regexp.MustCompile(`["']?(?:uin|bizuin)["']?\s*[:=]\s*["']?(\d{5,})`)
+	initialStatePattern = regexp.MustCompile(`userInfo\s*:\s*`)
+	nickPattern         = regexp.MustCompile(`(?:nick_name|nickname)["']?\s*[:=]\s*["']([^"']+)["']`)
+	headPattern         = regexp.MustCompile(`(?:head_img|headimgurl|head_img_url)["']?\s*[:=]\s*["']([^"']+)["']`)
+	userNamePattern     = regexp.MustCompile(`["']?(?:user_name|username)["']?\s*[:=]\s*["'](gh_[0-9a-f]+)["']`)
+	uinPattern          = regexp.MustCompile(`["']?(?:uin|bizuin)["']?\s*[:=]\s*["']?(\d{5,})`)
 )
 
-// parseProfile pulls the account identity out of a console page's bootstrap data.
+// parseProfile pulls the account identity out of a console page. Mini program
+// logins land on the wxamp app, whose __INITIAL_STATE__ carries userInfo as
+// JSON; official account logins land on /cgi-bin/home with wx.commonData.
 func parseProfile(html []byte) *Profile {
+	if loc := initialStatePattern.FindIndex(html); loc != nil {
+		var info struct {
+			NickName string `json:"nickName"`
+			IconURL  string `json:"iconUrl"`
+			UserName string `json:"userName"`
+			AppID    string `json:"appid"`
+			FakeID   int64  `json:"fakeId"`
+		}
+		if err := json.NewDecoder(strings.NewReader(string(html[loc[1]:]))).Decode(&info); err == nil && (info.NickName != "" || info.AppID != "") {
+			profile := &Profile{
+				NickName: info.NickName,
+				Avatar:   secureURL(info.IconURL),
+				UserName: info.UserName,
+				AppID:    info.AppID,
+			}
+			if info.FakeID != 0 {
+				profile.Uin = strconv.FormatInt(info.FakeID, 10)
+			}
+			return profile
+		}
+	}
 	profile := &Profile{}
 	if m := nickPattern.FindSubmatch(html); len(m) > 1 {
 		profile.NickName = unescapeJS(string(m[1]))
@@ -391,14 +416,17 @@ func parseProfile(html []byte) *Profile {
 	return profile
 }
 
-func (c *Client) loadProfile(ctx context.Context, session *Session, landing string) (*Profile, error) {
-	path := landing
-	if path == "" || !strings.HasPrefix(path, "/") {
-		path = "/cgi-bin/home?t=home/index&lang=zh_CN&token=" + session.currentToken()
-	}
-	body, err := c.do(ctx, session, http.MethodGet, path, nil, nil)
+// loadProfile opens the console root, which redirects to the landing page of
+// whichever console (mini program or official account) the session belongs to.
+func (c *Client) loadProfile(ctx context.Context, session *Session) (*Profile, error) {
+	finalURL, body, err := c.follow(ctx, session, "/")
 	if err != nil {
 		return nil, err
+	}
+	if token := extractToken(finalURL); token != "" {
+		session.mu.Lock()
+		session.token = token
+		session.mu.Unlock()
 	}
 	return parseProfile(body), nil
 }
@@ -422,7 +450,7 @@ func (c *Client) Check(ctx context.Context) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	profile, err := c.loadProfile(ctx, session, "")
+	profile, err := c.loadProfile(ctx, session)
 	if err != nil {
 		return nil, err
 	}
@@ -444,10 +472,55 @@ type Account struct {
 	UserName string `json:"user_name"`
 	Name     string `json:"name"`
 	Avatar   string `json:"avatar"`
-	BizUin   int64  `json:"bizuin"`
+	BizUin   int64  `json:"bizuin,omitempty"`
 	// Kind is miniprogram, official (公众号) or service (服务号).
 	Kind    string `json:"kind"`
 	Current bool   `json:"current"`
+}
+
+// AccountList is every account bound to the scanning WeChat user.
+type AccountList struct {
+	Accounts []Account `json:"accounts"`
+	// SwitchPermitted tells whether the console lets this session hop accounts.
+	SwitchPermitted bool `json:"switch_permitted"`
+}
+
+// parseWxaList reads the mini program console's account list
+// (GET /wxamp/cgi/getWxaList).
+func parseWxaList(body []byte, current *Profile) (*AccountList, error) {
+	var payload struct {
+		Ret  int `json:"ret"`
+		List []struct {
+			AppID    string `json:"appid"`
+			Name     string `json:"app_name"`
+			HeadImg  string `json:"app_headimg"`
+			UserName string `json:"username"`
+		} `json:"wax_list"`
+		// 0 means the operator did not allow switching when scanning.
+		SwitchPermit *int `json:"account_switch_permit"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("解析小程序列表失败: %w", err)
+	}
+	if payload.Ret != 0 {
+		return nil, &Error{Ret: payload.Ret, Msg: "读取小程序列表失败"}
+	}
+	out := &AccountList{SwitchPermitted: payload.SwitchPermit == nil || *payload.SwitchPermit != 0}
+	for _, item := range payload.List {
+		account := Account{
+			AppID:    item.AppID,
+			UserName: item.UserName,
+			Name:     item.Name,
+			Avatar:   secureURL(item.HeadImg),
+			Kind:     "miniprogram",
+		}
+		if current != nil {
+			account.Current = (current.AppID != "" && current.AppID == item.AppID) ||
+				(current.UserName != "" && current.UserName == item.UserName)
+		}
+		out.Accounts = append(out.Accounts, account)
+	}
+	return out, nil
 }
 
 type acctItem struct {
@@ -458,34 +531,26 @@ type acctItem struct {
 	AppID      string `json:"appid"`
 }
 
-type acctListResponse struct {
-	BaseResp struct {
-		Ret    int    `json:"ret"`
-		ErrMsg string `json:"err_msg"`
-	} `json:"base_resp"`
-	BizList struct {
-		List []acctItem `json:"list"`
-	} `json:"biz_list"`
-	ServiceBizList struct {
-		List []acctItem `json:"list"`
-	} `json:"service_biz_list"`
-	WxaList struct {
-		List []acctItem `json:"list"`
-	} `json:"wxa_list"`
-	ScanLoginCtx struct {
-		AccountSwitchPermit bool `json:"account_switch_permit"`
-	} `json:"scan_login_ctx"`
-}
-
-// AccountList is every account bound to the scanning WeChat user.
-type AccountList struct {
-	Accounts []Account `json:"accounts"`
-	// SwitchPermitted tells whether the console lets this session hop accounts.
-	SwitchPermitted bool `json:"switch_permitted"`
-}
-
+// parseAccountList reads the official account console's account list
+// (GET /cgi-bin/switchacct?action=get_acct_list).
 func parseAccountList(body []byte, current *Profile) (*AccountList, error) {
-	var payload acctListResponse
+	var payload struct {
+		BaseResp struct {
+			Ret int `json:"ret"`
+		} `json:"base_resp"`
+		BizList struct {
+			List []acctItem `json:"list"`
+		} `json:"biz_list"`
+		ServiceBizList struct {
+			List []acctItem `json:"list"`
+		} `json:"service_biz_list"`
+		WxaList struct {
+			List []acctItem `json:"list"`
+		} `json:"wxa_list"`
+		ScanLoginCtx struct {
+			AccountSwitchPermit bool `json:"account_switch_permit"`
+		} `json:"scan_login_ctx"`
+	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("解析账号列表失败: %w", err)
 	}
@@ -513,14 +578,12 @@ func parseAccountList(body []byte, current *Profile) (*AccountList, error) {
 	add("miniprogram", payload.WxaList.List)
 	add("official", payload.BizList.List)
 	add("service", payload.ServiceBizList.List)
-	if len(out.Accounts) == 1 {
-		out.Accounts[0].Current = true
-	}
 	return out, nil
 }
 
-// Accounts lists the accounts bound to the operator. When the console does not
-// expose account switching, the logged-in account is the only entry.
+// Accounts lists the accounts bound to the operator. Mini program logins use
+// the wxamp console API, official account logins the switchacct API; when
+// neither answers, the logged-in account is the only entry.
 func (c *Client) Accounts(ctx context.Context) (*AccountList, error) {
 	session, err := c.session()
 	if err != nil {
@@ -530,80 +593,98 @@ func (c *Client) Accounts(ctx context.Context) (*AccountList, error) {
 	profile := session.profile
 	session.mu.Unlock()
 
-	body, err := c.do(ctx, session, http.MethodGet, "/cgi-bin/switchacct", url.Values{"action": {"get_acct_list"}}, nil)
-	if err != nil {
-		return nil, err
+	var list *AccountList
+	if body, err := c.do(ctx, session, http.MethodGet, "/wxamp/cgi/getWxaList", nil, nil); err != nil {
+		if errors.Is(err, ErrNotLoggedIn) {
+			return nil, err
+		}
+	} else if parsed, err := parseWxaList(body, &profile); err == nil && len(parsed.Accounts) > 0 {
+		list = parsed
 	}
-	list, err := parseAccountList(body, &profile)
-	if err == nil && len(list.Accounts) > 0 {
-		return list, nil
+	if list == nil {
+		body, err := c.do(ctx, session, http.MethodGet, "/cgi-bin/switchacct", url.Values{"action": {"get_acct_list"}}, nil)
+		if errors.Is(err, ErrNotLoggedIn) {
+			return nil, err
+		}
+		if err == nil {
+			if parsed, err := parseAccountList(body, &profile); err == nil && len(parsed.Accounts) > 0 {
+				list = parsed
+			}
+		}
 	}
-	if errors.Is(err, ErrNotLoggedIn) {
-		return nil, err
+	if list == nil {
+		list = &AccountList{Accounts: []Account{{
+			AppID:    profile.AppID,
+			UserName: profile.UserName,
+			Name:     profile.NickName,
+			Avatar:   profile.Avatar,
+			Kind:     "miniprogram",
+		}}}
 	}
-	// Fall back to the account the session is logged into.
-	return &AccountList{Accounts: []Account{{
-		UserName: profile.UserName,
-		Name:     profile.NickName,
-		Avatar:   profile.Avatar,
-		Kind:     "miniprogram",
-		Current:  true,
-	}}}, nil
+	if len(list.Accounts) == 1 {
+		list.Accounts[0].Current = true
+	}
+	return list, nil
 }
 
 // Switch moves the console session to another account bound to the operator.
-func (c *Client) Switch(ctx context.Context, username string) error {
+// id is a mini program appid (wx...) or an official account username (gh_...).
+func (c *Client) Switch(ctx context.Context, id string) error {
 	session, err := c.session()
 	if err != nil {
 		return err
 	}
 	session.mu.Lock()
-	same := session.profile.UserName == username
+	same := id != "" && (session.profile.AppID == id || session.profile.UserName == id)
 	session.mu.Unlock()
 	if same {
 		return nil
 	}
 
-	body, err := c.do(ctx, session, http.MethodPost, "/cgi-bin/switchacct", url.Values{"action": {"switch"}}, url.Values{
-		"username": {username},
-	})
-	if err != nil {
-		return err
-	}
-	var payload struct {
-		BaseResp struct {
+	var ret int
+	if strings.HasPrefix(id, "wx") {
+		body, err := c.do(ctx, session, http.MethodPost, "/wxamp/cgi/switchAccount", nil, url.Values{"appid": {id}})
+		if err != nil {
+			return err
+		}
+		var payload struct {
 			Ret int `json:"ret"`
-		} `json:"base_resp"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return fmt.Errorf("切换小程序失败: %w", err)
+		}
+		ret = payload.Ret
+	} else {
+		body, err := c.do(ctx, session, http.MethodPost, "/cgi-bin/switchacct", url.Values{"action": {"switch"}}, url.Values{"username": {id}})
+		if err != nil {
+			return err
+		}
+		var payload struct {
+			BaseResp struct {
+				Ret int `json:"ret"`
+			} `json:"base_resp"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return fmt.Errorf("切换账号失败: %w", err)
+		}
+		ret = payload.BaseResp.Ret
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return fmt.Errorf("切换账号失败: %w", err)
-	}
-	switch payload.BaseResp.Ret {
+	switch ret {
 	case 0:
+	case 200003:
+		return ErrNotLoggedIn
 	case 201501:
-		return &Error{Ret: 201501, Msg: "当前登录未开启切换账号，请重新扫码并在手机上选择该账号"}
+		return &Error{Ret: ret, Msg: "扫码时未允许切换账号，请重新扫码并在手机上勾选「允许切换登录账号」"}
 	default:
-		return &Error{Ret: payload.BaseResp.Ret, Msg: fmt.Sprintf("切换账号失败（%d）", payload.BaseResp.Ret)}
+		return &Error{Ret: ret, Msg: fmt.Sprintf("切换账号失败（%d）", ret)}
 	}
 
 	// The console lands on "/" after switching; the redirect carries the new token.
-	finalURL, html, err := c.follow(ctx, session, "/")
+	profile, err := c.loadProfile(ctx, session)
 	if err != nil {
 		return err
 	}
-	token := extractToken(finalURL)
-	if token == "" {
-		token = extractToken(string(html))
-	}
-	if token == "" {
-		return ErrNotLoggedIn
-	}
-	profile := parseProfile(html)
 	session.mu.Lock()
-	session.token = token
-	if profile.UserName == "" {
-		profile.UserName = username
-	}
 	session.profile = *profile
 	session.mu.Unlock()
 	return nil
@@ -611,7 +692,7 @@ func (c *Client) Switch(ctx context.Context, username string) error {
 
 // VersionState summarizes the console's code page for a mini program.
 type VersionState struct {
-	UserName       string `json:"user_name"`
+	AppID          string `json:"appid"`
 	ExperienceVer  string `json:"experience_version"`
 	ExperienceDesc string `json:"experience_desc"`
 	ExperienceTime int64  `json:"experience_time"`
@@ -629,16 +710,14 @@ type versionBasic struct {
 
 func parseCodePage(body []byte) (*VersionState, error) {
 	var payload struct {
-		BaseResp struct {
-			Ret int `json:"ret"`
-		} `json:"base_resp"`
+		Ret      int    `json:"ret"`
 		CodeData string `json:"code_data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("解析版本信息失败: %w", err)
 	}
-	if payload.BaseResp.Ret != 0 {
-		return nil, &Error{Ret: payload.BaseResp.Ret, Msg: "读取版本信息失败"}
+	if payload.Ret != 0 {
+		return nil, &Error{Ret: payload.Ret, Msg: "读取版本信息失败"}
 	}
 	var code struct {
 		Experience struct {
@@ -668,15 +747,16 @@ func parseCodePage(body []byte) (*VersionState, error) {
 }
 
 // Version reads the code management page of the given mini program.
-func (c *Client) Version(ctx context.Context, username string) (*VersionState, error) {
-	if err := c.Switch(ctx, username); err != nil {
+func (c *Client) Version(ctx context.Context, appid string) (*VersionState, error) {
+	if err := c.Switch(ctx, appid); err != nil {
 		return nil, err
 	}
 	session, err := c.session()
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.do(ctx, session, http.MethodGet, "/wxamp/wacodepage/getcodepage", nil, nil)
+	inner := "/wxopen/wacodepage?action=getcodepage&f=json&token=" + session.currentToken()
+	body, err := c.do(ctx, session, http.MethodGet, "/wxamp/cgi/route", url.Values{"path": {inner}}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -684,14 +764,14 @@ func (c *Client) Version(ctx context.Context, username string) (*VersionState, e
 	if err != nil {
 		return nil, err
 	}
-	state.UserName = username
+	state.AppID = appid
 	return state, nil
 }
 
 // ---- transport helpers ----
 
-// do sends a console request with the parameters every console call carries
-// (token, lang, f=json, ajax=1, fingerprint).
+// do sends a console API request with the parameters the console's own pages
+// attach to it.
 func (c *Client) do(ctx context.Context, session *Session, method, path string, query, form url.Values) ([]byte, error) {
 	_, body, err := c.send(ctx, session, method, path, query, form)
 	return body, err
@@ -702,69 +782,106 @@ func (c *Client) follow(ctx context.Context, session *Session, path string) (str
 	return c.send(ctx, session, http.MethodGet, path, nil, nil)
 }
 
+type requestKind int
+
+const (
+	kindPage  requestKind = iota // HTML page, no extra parameters
+	kindWxamp                    // mini program console API under /wxamp/cgi
+	kindCGI                      // legacy /cgi-bin ajax API
+)
+
+func classify(path string) requestKind {
+	switch {
+	case strings.HasPrefix(path, "/wxamp/cgi"):
+		return kindWxamp
+	case path == "/" || strings.HasPrefix(path, "/cgi-bin/home") || strings.HasPrefix(path, "/wxamp/"):
+		return kindPage
+	default:
+		return kindCGI
+	}
+}
+
 func (c *Client) send(ctx context.Context, session *Session, method, path string, query, form url.Values) (string, []byte, error) {
 	endpoint, err := url.Parse(c.baseURL + path)
 	if err != nil {
 		return "", nil, err
 	}
-	isPage := path == "/" || strings.HasPrefix(path, "/cgi-bin/home") || strings.HasPrefix(path, "/wxamp/") && !strings.Contains(path, "wacodepage")
-	common := url.Values{
-		"token":       {session.currentToken()},
-		"lang":        {"zh_CN"},
-		"f":           {"json"},
-		"ajax":        {"1"},
-		"fingerprint": {session.fingerprint},
-	}
+	kind := classify(path)
+	token := session.currentToken()
 	params := endpoint.Query()
 	for key, values := range query {
 		params[key] = values
 	}
-	var reader io.Reader
-	if method == http.MethodPost {
-		values := url.Values{}
-		for key, v := range common {
-			values[key] = v
+	setDefault := func(values url.Values, key, value string) {
+		if _, set := values[key]; !set {
+			values.Set(key, value)
 		}
-		for key, v := range form {
-			values[key] = v
+	}
+	body := url.Values{}
+	for key, v := range form {
+		body[key] = v
+	}
+	referer := c.baseURL + "/"
+	switch kind {
+	case kindWxamp:
+		// The wxamp app keeps token and lang in the query, even for POSTs.
+		setDefault(params, "token", token)
+		setDefault(params, "lang", "zh_CN")
+		setDefault(params, "f", "json")
+		setDefault(params, "random", fmt.Sprintf("%.9f", randFloat()))
+		referer = c.baseURL + "/wxamp/index/index?lang=zh_CN&token=" + token
+	case kindCGI:
+		common := url.Values{
+			"token":       {token},
+			"lang":        {"zh_CN"},
+			"f":           {"json"},
+			"ajax":        {"1"},
+			"fingerprint": {session.fingerprint},
 		}
-		reader = strings.NewReader(values.Encode())
-	} else if !isPage {
+		target := params
+		if method == http.MethodPost {
+			target = body
+		}
 		for key, v := range common {
-			if _, set := params[key]; !set {
-				params[key] = v
-			}
+			setDefault(target, key, v[0])
 		}
 	}
 	endpoint.RawQuery = params.Encode()
 
+	var reader io.Reader
+	if method == http.MethodPost {
+		reader = strings.NewReader(body.Encode())
+	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
 	if err != nil {
 		return "", nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Referer", c.baseURL+"/")
+	req.Header.Set("Referer", referer)
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	}
-	if !isPage {
+	switch kind {
+	case kindCGI:
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
 		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
+	case kindWxamp:
+		req.Header.Set("Accept", "application/json, text/plain, */*")
 	}
 	resp, err := session.client.Do(req)
 	if err != nil {
 		return "", nil, fmt.Errorf("连接微信公众平台失败: %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return "", nil, err
 	}
 	finalURL := resp.Request.URL.String()
-	if session.currentToken() != "" && sessionDropped(resp.Request.URL, body) {
+	if token != "" && sessionDropped(resp.Request.URL, data) {
 		return finalURL, nil, ErrNotLoggedIn
 	}
-	return finalURL, body, nil
+	return finalURL, data, nil
 }
 
 // sessionDropped recognises the console bouncing a logged-in request back to
@@ -775,14 +892,16 @@ func sessionDropped(final *url.URL, body []byte) bool {
 	}
 	if len(body) > 0 && body[0] == '{' {
 		var payload struct {
+			Ret      int `json:"ret"`
 			BaseResp struct {
 				Ret int `json:"ret"`
 			} `json:"base_resp"`
 		}
 		if json.Unmarshal(body, &payload) == nil {
-			switch payload.BaseResp.Ret {
-			case 200003, 200040:
-				return true
+			for _, ret := range []int{payload.Ret, payload.BaseResp.Ret} {
+				if ret == 200003 || ret == 200040 {
+					return true
+				}
 			}
 		}
 	}
@@ -833,6 +952,12 @@ func randomHex(n int) string {
 	buf := make([]byte, n)
 	_, _ = io.ReadFull(rand.Reader, buf)
 	return hex.EncodeToString(buf)
+}
+
+func randFloat() float64 {
+	buf := make([]byte, 4)
+	_, _ = io.ReadFull(rand.Reader, buf)
+	return float64(uint32(buf[0])<<24|uint32(buf[1])<<16|uint32(buf[2])<<8|uint32(buf[3])) / (1 << 32)
 }
 
 func randInt(max int) int {

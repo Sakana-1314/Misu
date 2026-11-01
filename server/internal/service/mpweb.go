@@ -91,6 +91,11 @@ func (s *MPWebService) restore(ctx context.Context) {
 	if _, err := s.RefreshAccounts(ctx); err != nil {
 		s.log.Info("mp web session restored without account list", "error", err)
 	}
+	// The console may have rotated the token or the identity may now parse;
+	// keep the stored copy current.
+	if err := s.persist(ctx); err != nil {
+		s.log.Warn("failed to persist mp web session", "error", err)
+	}
 }
 
 func (s *MPWebService) keepAlive(ctx context.Context) {
@@ -202,28 +207,40 @@ func (s *MPWebService) Status(ctx context.Context) *MPWebStatus {
 	return status
 }
 
-// annotate links console accounts to authorized mini programs by their
-// original id (gh_...), which both sides share.
+// annotate links console accounts to authorized mini programs by appid or
+// original id (gh_...), whichever the console reported.
 func (s *MPWebService) annotate(ctx context.Context, accounts []mpweb.Account) []MPWebAccount {
 	out := make([]MPWebAccount, 0, len(accounts))
+	appids := make([]string, 0, len(accounts))
 	names := make([]string, 0, len(accounts))
 	for _, account := range accounts {
+		if account.AppID != "" {
+			appids = append(appids, account.AppID)
+		}
 		if account.UserName != "" {
 			names = append(names, account.UserName)
 		}
 	}
 	linked := map[string]string{}
-	if len(names) > 0 {
+	if len(appids) > 0 || len(names) > 0 {
 		var rows []model.Authorizer
 		if err := s.db.WithContext(ctx).Select("app_id", "user_name").
-			Where("user_name IN ? AND status = ?", names, "active").Find(&rows).Error; err == nil {
+			Where("(app_id IN ? OR user_name IN ?) AND status = ?", append(appids, ""), append(names, ""), "active").
+			Find(&rows).Error; err == nil {
 			for _, row := range rows {
-				linked[row.UserName] = row.AppID
+				linked[row.AppID] = row.AppID
+				if row.UserName != "" {
+					linked[row.UserName] = row.AppID
+				}
 			}
 		}
 	}
 	for _, account := range accounts {
-		out = append(out, MPWebAccount{Account: account, AuthorizerAppID: linked[account.UserName]})
+		appid := linked[account.AppID]
+		if appid == "" {
+			appid = linked[account.UserName]
+		}
+		out = append(out, MPWebAccount{Account: account, AuthorizerAppID: appid})
 	}
 	return out
 }
@@ -342,8 +359,8 @@ func (s *MPWebService) RefreshAccounts(ctx context.Context) ([]MPWebAccount, err
 	return s.annotate(ctx, list.Accounts), nil
 }
 
-func (s *MPWebService) Version(ctx context.Context, username string) (*mpweb.VersionState, error) {
-	state, err := s.wx.Version(ctx, username)
+func (s *MPWebService) Version(ctx context.Context, appid string) (*mpweb.VersionState, error) {
+	state, err := s.wx.Version(ctx, appid)
 	if err != nil {
 		s.handleErr(ctx, err)
 		return nil, err

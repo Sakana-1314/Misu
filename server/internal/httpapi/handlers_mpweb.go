@@ -61,7 +61,7 @@ func (s *Server) mpWebRefreshAccounts(c *gin.Context) {
 }
 
 func (s *Server) mpWebVersion(c *gin.Context) {
-	version, err := s.mpWeb.Version(c.Request.Context(), c.Param("username"))
+	version, err := s.mpWeb.Version(c.Request.Context(), c.Param("appid"))
 	if err != nil {
 		s.respondServiceError(c, err)
 		return

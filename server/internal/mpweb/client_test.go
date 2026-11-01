@@ -16,7 +16,7 @@ type fakeConsole struct {
 	mu        sync.Mutex
 	askBody   string
 	loginBody string
-	acctBody  string
+	wxaBody   string
 	requests  []*http.Request
 	forms     map[string]url.Values
 }
@@ -25,8 +25,11 @@ func newFakeConsole() *fakeConsole {
 	return &fakeConsole{
 		askBody:   `{"acct_size":0,"base_resp":{"err_msg":"ok","ret":0},"binduin":0,"status":0}`,
 		loginBody: `{"base_resp":{"err_msg":"ok","ret":0},"redirect_url":"/cgi-bin/home?t=home/index&lang=zh_CN&token=654636700"}`,
-		acctBody:  `{"base_resp":{"ret":0},"biz_list":{"list":[]},"service_biz_list":{"list":[]},"wxa_list":{"list":[]}}`,
-		forms:     map[string]url.Values{},
+		wxaBody: `{"ret":0,"wax_list":[
+			{"appid":"wx821c8dd7888db38a","app_name":"修猫学习助手","app_headimg":"http://wx.qlogo.cn/a/0","username":"gh_a262422ef9bf","type":1},
+			{"appid":"wx0000000000000002","app_name":"另一个小程序","app_headimg":"","username":"gh_b000000000002","type":1}],
+			"account_switch_permit":1}`,
+		forms: map[string]url.Values{},
 	}
 }
 
@@ -41,7 +44,13 @@ func (f *fakeConsole) handler() http.Handler {
 		}
 		f.mu.Unlock()
 		action := r.URL.Query().Get("action")
+		loggedIn := false
+		if cookie, err := r.Cookie("slave_sid"); err == nil && cookie.Value != "" {
+			loggedIn = true
+		}
 		switch {
+		case r.URL.Path == "/" && loggedIn:
+			http.Redirect(w, r, "/wxamp/index/index?lang=zh_CN&token=654636700", http.StatusFound)
 		case r.URL.Path == "/":
 			http.SetCookie(w, &http.Cookie{Name: "ua_id", Value: "x", Path: "/"})
 			w.Write([]byte("<html>login</html>"))
@@ -56,11 +65,23 @@ func (f *fakeConsole) handler() http.Handler {
 			f.mu.Unlock()
 			w.Write([]byte(body))
 		case r.URL.Path == "/cgi-bin/bizlogin" && action == "login":
+			http.SetCookie(w, &http.Cookie{Name: "slave_sid", Value: "s1", Path: "/"})
 			w.Write([]byte(f.loginBody))
-		case r.URL.Path == "/cgi-bin/home":
-			w.Write([]byte(`<script>wx.commonData={data:{t:"654636700",uin:"3912345678",user_name:"gh_a262422ef9bf",nick_name:"修猫学习助手",head_img:"http:\/\/wx.qlogo.cn\/x\/0"}}</script>`))
-		case r.URL.Path == "/cgi-bin/switchacct" && action == "get_acct_list":
-			w.Write([]byte(f.acctBody))
+		case r.URL.Path == "/wxamp/index/index":
+			w.Write([]byte(`<script>window.__INITIAL_STATE__ = {
+            userInfo: {"ret":0,"fakeId":3320105474,"iconUrl":"http://wx.qlogo.cn/a/0","userName":"gh_a262422ef9bf","nickName":"修猫学习助手","appid":"wx821c8dd7888db38a","token":"654636700"},
+            wujieConfig: "{}"
+        }</script>`))
+		case r.URL.Path == "/wxamp/cgi/getWxaList":
+			if r.URL.Query().Get("token") != "654636700" {
+				w.Write([]byte(`{"ret":200003}`))
+				return
+			}
+			w.Write([]byte(f.wxaBody))
+		case r.URL.Path == "/wxamp/cgi/switchAccount" && r.Method == http.MethodPost:
+			w.Write([]byte(`{"ret":0,"token":"777"}`))
+		case r.URL.Path == "/wxamp/cgi/route" && strings.HasPrefix(r.URL.Query().Get("path"), "/wxopen/wacodepage?action=getcodepage"):
+			w.Write([]byte(`{"ret":0,"code_data":"{\"experience_info\":{\"basic_info\":{\"version\":\"1.2.0\"}},\"online_info\":{\"basic_info\":{\"version\":\"1.1.0\"}},\"develop_info\":{\"info_list\":[{}]}}"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -122,15 +143,37 @@ func TestLoginFlow(t *testing.T) {
 	if !client.Connected() {
 		t.Fatal("client should be connected")
 	}
-	if state.NickName != "修猫学习助手" || state.Avatar != "https://wx.qlogo.cn/x/0" {
+	if state.NickName != "修猫学习助手" || state.Avatar != "https://wx.qlogo.cn/a/0" {
 		t.Fatalf("profile not parsed: %+v", state)
 	}
 	profile, _ := client.Profile()
-	if profile.UserName != "gh_a262422ef9bf" || profile.Uin != "3912345678" {
+	if profile.UserName != "gh_a262422ef9bf" || profile.AppID != "wx821c8dd7888db38a" || profile.Uin != "3320105474" {
 		t.Fatalf("unexpected profile %+v", profile)
 	}
 	if _, err := client.QRCode(); !errors.Is(err, ErrNoPendingLogin) {
 		t.Fatal("pending QR should be cleared after login")
+	}
+
+	list, err := client.Accounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Accounts) != 2 || !list.SwitchPermitted {
+		t.Fatalf("unexpected account list %+v", list)
+	}
+	if first := list.Accounts[0]; !first.Current || first.AppID != "wx821c8dd7888db38a" || first.Avatar != "https://wx.qlogo.cn/a/0" {
+		t.Fatalf("logged-in mini program should be marked current: %+v", first)
+	}
+
+	version, err := client.Version(ctx, "wx0000000000000002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version.ExperienceVer != "1.2.0" || version.ReleaseVersion != "1.1.0" || version.DevelopCount != 1 {
+		t.Fatalf("unexpected version %+v", version)
+	}
+	if req := console.find("/wxamp/cgi/switchAccount", ""); req == nil {
+		t.Fatal("switching should go through the wxamp console API")
 	}
 }
 
@@ -182,7 +225,7 @@ func TestLoginNeedsVerification(t *testing.T) {
 	}
 }
 
-func TestAccountListParsing(t *testing.T) {
+func TestOfficialAccountListParsing(t *testing.T) {
 	body := []byte(`{"base_resp":{"ret":0},"order":2,"scan_login_ctx":{"account_switch_permit":true},
 		"biz_list":{"order_type":1,"list":[{"username":"gh_111","nickname":"公众号","headimgurl":"http://a/0","bizuin":1001}]},
 		"service_biz_list":{"order_type":8,"list":[]},
@@ -203,8 +246,21 @@ func TestAccountListParsing(t *testing.T) {
 	}
 }
 
+func TestWxaListParsing(t *testing.T) {
+	list, err := parseWxaList([]byte(`{"ret":0,"wax_list":[{"appid":"wx1","app_name":"A","username":"gh_1"}],"account_switch_permit":0}`), &Profile{AppID: "wx1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.SwitchPermitted || !list.Accounts[0].Current || list.Accounts[0].Name != "A" {
+		t.Fatalf("unexpected list %+v", list)
+	}
+	if _, err := parseWxaList([]byte(`{"ret":200002}`), nil); err == nil {
+		t.Fatal("non-zero ret must fail")
+	}
+}
+
 func TestCodePageParsing(t *testing.T) {
-	body := []byte(`{"base_resp":{"ret":0},"code_data":"{\"experience_info\":{\"basic_info\":{\"version\":\"1.2.0\",\"describe\":\"体验版\",\"time\":1700000000}},\"online_info\":{\"basic_info\":{\"version\":\"1.1.0\",\"describe\":\"线上版\",\"time\":1690000000}},\"develop_info\":{\"info_list\":[{},{}]}}"}`)
+	body := []byte(`{"ret":0,"code_data":"{\"experience_info\":{\"basic_info\":{\"version\":\"1.2.0\",\"describe\":\"体验版\",\"time\":1700000000}},\"online_info\":{\"basic_info\":{\"version\":\"1.1.0\",\"describe\":\"线上版\",\"time\":1690000000}},\"develop_info\":{\"info_list\":[{},{}]}}"}`)
 	state, err := parseCodePage(body)
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +281,9 @@ func TestSessionDropped(t *testing.T) {
 	}
 	if !sessionDropped(home, []byte(`{"base_resp":{"ret":200003}}`)) {
 		t.Fatal("ret 200003 means the session expired")
+	}
+	if !sessionDropped(home, []byte(`{"ret":200003}`)) {
+		t.Fatal("wxamp APIs report the expired session at the top level")
 	}
 }
 
