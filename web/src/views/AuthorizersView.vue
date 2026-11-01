@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NTag, useMessage, type DataTableColumns, type PaginationProps } from 'naive-ui'
-import { AddOutline, RefreshOutline, SearchOutline, SyncOutline } from '@vicons/ionicons5'
+import { NButton, NIcon, NTag, NTooltip, useMessage, type DataTableColumns, type PaginationProps } from 'naive-ui'
+import { AddOutline, AppsOutline, ChevronDownOutline, ChevronForwardOutline, SearchOutline, SyncOutline } from '@vicons/ionicons5'
 import { api } from '@/api/client'
-import type { Authorizer, Job, Paged, SyncResult } from '@/types/api'
-import { jobTypeOptions } from '@/utils/constants'
+import type { Authorizer, Paged, SyncResult } from '@/types/api'
+import { actionMenu, useJobCreated } from '@/utils/actions'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import AppAvatar from '@/components/AppAvatar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BatchActionModal from '@/components/BatchActionModal.vue'
@@ -14,13 +16,14 @@ import AddAuthorizerModal from '@/components/AddAuthorizerModal.vue'
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const onJobCreated = useJobCreated()
 
 const items = ref<Authorizer[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
-const status = ref<string | null>('active')
+const status = ref<string>('active')
 const loading = ref(false)
 const syncing = ref(false)
 const checkedKeys = ref<string[]>([])
@@ -37,7 +40,7 @@ async function load() {
         page: page.value,
         page_size: pageSize.value,
         keyword: keyword.value.trim() || undefined,
-        status: status.value || undefined,
+        status: status.value === 'all' ? undefined : status.value,
       },
     })
     items.value = data.items || []
@@ -69,6 +72,7 @@ function onKeywordInput() {
 
 function onFilterChange() {
   page.value = 1
+  checkedKeys.value = []
   void load()
 }
 
@@ -76,7 +80,7 @@ async function syncAuthorizers() {
   syncing.value = true
   try {
     const result = await api.post<SyncResult>('/authorizers/sync', null, { timeout: 300000 })
-    message.success(`已同步 ${result.total} 个小程序`)
+    message.success(result.added > 0 ? `同步完成，新增 ${result.added} 个小程序` : `同步完成，共 ${result.total} 个小程序`)
     checkedKeys.value = []
     await load()
   } finally {
@@ -93,7 +97,7 @@ const missingPermissionCount = computed(
 )
 
 const columns = computed<DataTableColumns<Authorizer>>(() => [
-  { type: 'selection', fixed: 'left' },
+  { type: 'selection', fixed: 'left', disabled: (row) => row.status !== 'active' },
   {
     title: '小程序',
     key: 'nick_name',
@@ -107,202 +111,277 @@ const columns = computed<DataTableColumns<Authorizer>>(() => [
         ]),
       ]),
   },
-  { title: '主体', key: 'principal_name', minWidth: 180, render: (row) => row.principal_name || '—' },
-  { title: '状态', key: 'status', width: 120, render: (row) => h(StatusTag, { kind: 'authorizer', value: row.status }) },
+  { title: '主体', key: 'principal_name', minWidth: 180, render: (row) => h('span', { class: 'cell-muted' }, row.principal_name || '—') },
+  { title: '状态', key: 'status', width: 110, render: (row) => h(StatusTag, { kind: 'authorizer', value: row.status }) },
   {
-    title: '代码权限',
+    title: '代码管理',
     key: 'func_info',
-    width: 120,
+    width: 130,
     render: (row) => {
-      if (row.status !== 'active') return h(NTag, { size: 'small', bordered: false }, { default: () => '—' })
-      return hasCodePermission(row)
-        ? h(NTag, { size: 'small', bordered: false, type: 'primary' }, { default: () => '已授权' })
-        : h(NTag, { size: 'small', bordered: false, type: 'warning' }, { default: () => '缺少权限' })
+      if (row.status !== 'active') return h('span', { class: 'cell-muted' }, '—')
+      if (hasCodePermission(row)) return h(NTag, { size: 'small', bordered: false, type: 'primary' }, { default: () => '可用' })
+      return h(
+        NTooltip,
+        { style: { maxWidth: '260px' } },
+        {
+          trigger: () => h(NTag, { size: 'small', bordered: false, type: 'warning' }, { default: () => '未授权' }),
+          default: () => '授权时没有勾选「开发管理与数据分析」，无法上传代码和提审。请让管理员重新授权。',
+        },
+      )
     },
   },
   {
-    title: '操作',
+    title: '',
     key: 'actions',
-    width: 116,
+    width: 92,
     fixed: 'right',
     render: (row) =>
       h(
         NButton,
-        { onClick: () => router.push(`/authorizers/${row.appid}`) }, { default: () => '详情' },
+        { size: 'small', quaternary: true, type: 'primary', iconPlacement: 'right', onClick: (event: MouseEvent) => {
+          event.stopPropagation()
+          void router.push(`/authorizers/${row.appid}`)
+        } },
+        { default: () => '管理', icon: () => h(NIcon, null, { default: () => h(ChevronForwardOutline) }) },
       ),
   },
 ])
 
-const pagination = computed<PaginationProps>(() => ({
-  page: page.value,
-  pageSize: pageSize.value,
-  itemCount: total.value,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (value: number) => {
-    page.value = value
-    void load()
+const rowProps = (row: Authorizer) => ({
+  style: 'cursor: pointer',
+  onClick: (event: MouseEvent) => {
+    const target = event.target as HTMLElement
+    if (target.closest('.n-checkbox, .n-data-table-td--selection')) return
+    void router.push(`/authorizers/${row.appid}`)
   },
-  onUpdatePageSize: (value: number) => {
-    pageSize.value = value
-    page.value = 1
-    void load()
-  },
-}))
+})
 
-const moreOptions = jobTypeOptions
-  .filter((item) => !['commit', 'submit_audit'].includes(item.value))
-  .map((item) => ({ label: item.label, key: item.value }))
+const pagination = computed<PaginationProps | false>(() =>
+  total.value <= pageSize.value && page.value === 1
+    ? false
+    : {
+        page: page.value,
+        pageSize: pageSize.value,
+        itemCount: total.value,
+        showSizePicker: true,
+        pageSizes: [10, 20, 50, 100],
+        onUpdatePage: (value: number) => {
+          page.value = value
+          void load()
+        },
+        onUpdatePageSize: (value: number) => {
+          pageSize.value = value
+          page.value = 1
+          void load()
+        },
+      },
+)
+
+const moreOptions = actionMenu(['commit', 'submit_audit', 'release'])
 
 function openAction(action: string) {
   if (checkedKeys.value.length === 0) {
-    message.warning('请先选择小程序')
+    message.warning('请先勾选小程序')
     return
   }
   actionType.value = action
   actionShow.value = true
 }
 
-function onJobCreated(job: Job) {
+function handleCreated(job: Parameters<typeof onJobCreated>[0]) {
   checkedKeys.value = []
-  message.success(`已提交 ${job.total} 个小程序的任务`)
-  window.setTimeout(() => void load(), 1500)
+  onJobCreated(job)
 }
 
-const statusOptions = [
-  { label: '已授权', value: 'active' },
-  { label: '已取消授权', value: 'unauthorized' },
-]
-
-const showEmpty = computed(() => !loading.value && items.value.length === 0 && !keyword.value && status.value === 'active')
+const isEmptyLibrary = computed(() => !loading.value && items.value.length === 0 && !keyword.value && status.value === 'active')
 </script>
 
 <template>
   <div>
-    <div class="page-toolbar">
-      <div class="left-actions">
+    <PageHeader title="小程序" description="已接入的小程序都在这里。勾选后可以批量上传代码、提交审核和发布。">
+      <n-tooltip>
+        <template #trigger>
+          <n-button :loading="syncing" @click="syncAuthorizers">
+            <template #icon><n-icon><SyncOutline /></n-icon></template>
+            同步列表
+          </n-button>
+        </template>
+        从微信开放平台拉取最新的授权状态
+      </n-tooltip>
+      <n-button type="primary" @click="addShow = true">
+        <template #icon><n-icon><AddOutline /></n-icon></template>
+        接入小程序
+      </n-button>
+    </PageHeader>
+
+    <div v-if="isEmptyLibrary" class="surface-card">
+      <EmptyState
+        :icon="AppsOutline"
+        title="还没有接入小程序"
+        description="接入后即可在这里统一上传代码、提交审核和发布。只需要小程序管理员扫码确认授权。"
+      >
+        <n-button type="primary" @click="addShow = true">接入第一个小程序</n-button>
+        <n-button :loading="syncing" @click="syncAuthorizers">已授权过？同步列表</n-button>
+      </EmptyState>
+    </div>
+
+    <div v-else class="surface-card list-card">
+      <div class="list-toolbar">
+        <n-radio-group v-model:value="status" size="small" @update:value="onFilterChange">
+          <n-radio-button value="active">已接入</n-radio-button>
+          <n-radio-button value="unauthorized">已取消授权</n-radio-button>
+          <n-radio-button value="all">全部</n-radio-button>
+        </n-radio-group>
         <n-input
           v-model:value="keyword"
           clearable
-          placeholder="搜索小程序"
-          style="width: 240px"
+          placeholder="搜索名称或 AppID"
+          class="search"
           @input="onKeywordInput"
           @clear="onFilterChange"
         >
           <template #prefix><n-icon><SearchOutline /></n-icon></template>
         </n-input>
-        <n-select
-          v-model:value="status"
-          :options="statusOptions"
-          clearable
-          placeholder="状态"
-          style="width: 140px"
-          @update:value="onFilterChange"
-        />
       </div>
-      <n-button :loading="loading" @click="load">
-        <template #icon><n-icon><RefreshOutline /></n-icon></template>
-        刷新
-      </n-button>
-      <n-button :loading="syncing" @click="syncAuthorizers">
-        <template #icon><n-icon><SyncOutline /></n-icon></template>
-        同步
-      </n-button>
-      <n-button type="primary" @click="addShow = true">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增
-      </n-button>
-    </div>
 
-    <div class="stack-12">
-      <n-alert v-if="missingPermissionCount > 0" type="warning" :bordered="false">
-        部分小程序缺少代码管理权限，批量操作可能失败。
+      <n-alert v-if="missingPermissionCount > 0" type="warning" :bordered="false" class="perm-alert">
+        有 {{ missingPermissionCount }} 个小程序未授权代码管理，批量上传和提审时会被跳过。
       </n-alert>
 
-      <transition name="slide-up">
-        <div v-if="checkedKeys.length > 0" class="batch-bar">
-          <div class="batch-info">已选 {{ checkedKeys.length }} 个</div>
-          <div class="batch-actions">
-            <n-button type="primary" @click="openAction('commit')">上传</n-button>
-            <n-button type="primary" @click="openAction('submit_audit')">提审</n-button>
-            <n-dropdown trigger="click" :options="moreOptions" @select="(key: string | number) => openAction(String(key))">
-              <n-button>更多</n-button>
-            </n-dropdown>
-            <n-button @click="checkedKeys = []">清空</n-button>
-          </div>
-        </div>
-      </transition>
-
-      <div v-if="showEmpty" class="surface-card empty-state">暂无小程序</div>
-
       <n-data-table
-        v-else
         :columns="columns"
         :data="items"
         :loading="loading"
         :pagination="pagination"
         :row-key="(row: Authorizer) => row.appid"
+        :row-props="rowProps"
         :checked-row-keys="checkedKeys"
-        :scroll-x="900"
-        size="small"
+        :scroll-x="880"
         @update:checked-row-keys="(keys: (string | number)[]) => (checkedKeys = keys as string[])"
-      />
+      >
+        <template #empty>
+          <EmptyState compact title="没有找到小程序" description="换个关键词或筛选条件试试。" />
+        </template>
+      </n-data-table>
     </div>
 
+    <transition name="slide-up">
+      <div v-if="checkedKeys.length > 0" class="batch-bar">
+        <div class="batch-info">
+          已选 <b>{{ checkedKeys.length }}</b> 个
+          <n-button text size="small" class="batch-clear" @click="checkedKeys = []">取消选择</n-button>
+        </div>
+        <div class="batch-actions">
+          <n-button size="small" @click="openAction('commit')">上传代码</n-button>
+          <n-button size="small" @click="openAction('submit_audit')">提交审核</n-button>
+          <n-button size="small" type="primary" @click="openAction('release')">发布上线</n-button>
+          <n-dropdown trigger="click" :options="moreOptions" placement="top-end" @select="(key: string | number) => openAction(String(key))">
+            <n-button size="small" icon-placement="right">
+              更多操作
+              <template #icon><n-icon><ChevronDownOutline /></n-icon></template>
+            </n-button>
+          </n-dropdown>
+        </div>
+      </div>
+    </transition>
+
     <AddAuthorizerModal v-model:show="addShow" @synced="load" />
-    <BatchActionModal
-      v-model:show="actionShow"
-      :action="actionType"
-      :appids="checkedKeys"
-      :apps="items"
-      @created="onJobCreated"
-    />
+    <BatchActionModal v-model:show="actionShow" :action="actionType" :appids="checkedKeys" :apps="items" @created="handleCreated" />
   </div>
 </template>
 
 <style scoped>
-.batch-bar {
-  position: sticky;
-  top: 76px;
-  z-index: 12;
+.list-card {
+  padding: 14px 16px 6px;
+}
+
+.list-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  background: var(--primary-soft);
+  gap: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
+.search {
+  width: 260px;
+}
+
+.perm-alert {
+  margin-bottom: 12px;
+}
+
+.batch-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 30;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 12px 10px 18px;
+  border-radius: 14px;
+  background: #172033;
+  color: #fff;
+  box-shadow: 0 18px 40px -12px rgba(15, 23, 42, 0.45);
+}
+
 .batch-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 13px;
-  font-weight: 560;
-  color: var(--primary);
+  white-space: nowrap;
+}
+
+.batch-clear {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .batch-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-@media (max-width: 720px) {
-  .page-toolbar {
-    justify-content: flex-start;
-  }
+.batch-actions :deep(.n-button:not(.n-button--primary-type)) {
+  --n-color: rgba(255, 255, 255, 0.08) !important;
+  --n-color-hover: rgba(255, 255, 255, 0.16) !important;
+  --n-color-pressed: rgba(255, 255, 255, 0.2) !important;
+  --n-color-focus: rgba(255, 255, 255, 0.16) !important;
+  --n-text-color: #fff !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-text-color-focus: #fff !important;
+  --n-border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  --n-border-hover: 1px solid rgba(255, 255, 255, 0.3) !important;
+  --n-border-pressed: 1px solid rgba(255, 255, 255, 0.3) !important;
+  --n-border-focus: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
 
-  .page-toolbar .left-actions {
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translate(-50%, 12px);
+}
+
+@media (max-width: 760px) {
+  .search {
     width: 100%;
   }
 
-  .page-toolbar .left-actions :deep(.n-input) {
-    width: 100% !important;
+  .batch-bar {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
 
-  .batch-bar {
-    top: 68px;
+  .batch-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

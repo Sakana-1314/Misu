@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -25,10 +25,30 @@ const fallback = computed(() => {
   if (!name) return '小'
   return name.slice(0, 1)
 })
+
+// n-avatar shows slot text instead of the image whenever text is given, so the
+// initial is rendered only when there is no usable image.
+const failed = ref(false)
+watch(
+  () => props.src,
+  () => {
+    failed.value = false
+  },
+)
+const showImage = computed(() => Boolean(props.src) && !failed.value)
 </script>
 
 <template>
-  <n-avatar round :size="size" :src="src || undefined" :color="color" :style="{ fontSize: `${Math.max(12, size * 0.38)}px` }">
+  <n-avatar
+    v-if="showImage"
+    round
+    :size="size"
+    :src="src || undefined"
+    :img-props="{ referrerpolicy: 'no-referrer' }"
+    :color="color"
+    @error="failed = true"
+  />
+  <n-avatar v-else round :size="size" :color="color" :style="{ fontSize: `${Math.max(12, size * 0.38)}px` }">
     {{ fallback }}
   </n-avatar>
 </template>

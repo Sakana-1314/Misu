@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
-import { NButton, type DataTableColumns, type PaginationProps } from 'naive-ui'
+import { type DataTableColumns, type PaginationProps } from 'naive-ui'
 import { RefreshOutline } from '@vicons/ionicons5'
 import { api } from '@/api/client'
 import type { OperationLog, Paged } from '@/types/api'
 import { formatTime } from '@/utils/format'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { operationActionLabels } from '@/utils/constants'
 
 const items = ref<OperationLog[]>([])
@@ -45,6 +47,8 @@ const columns = computed<DataTableColumns<OperationLog>>(() => [
     minWidth: 220,
     render: (row) => h('span', { class: 'cell-muted' }, row.target || '—'),
   },
+  { title: '操作人', key: 'actor', width: 120, render: (row) => h('span', { class: 'cell-muted' }, row.actor || '—') },
+  { title: 'IP', key: 'ip', width: 140, render: (row) => h('span', { class: 'cell-muted mono' }, row.ip || '—') },
 ])
 
 const pagination = computed<PaginationProps>(() => ({
@@ -59,15 +63,16 @@ const pagination = computed<PaginationProps>(() => ({
 
 <template>
   <div>
-    <div class="page-toolbar">
+    <PageHeader title="操作日志" description="控制台中的每一次重要操作都会记录在这里，便于追溯。">
       <n-button :loading="loading" @click="load()">
         <template #icon><n-icon><RefreshOutline /></n-icon></template>
         刷新
       </n-button>
-    </div>
-    <div class="surface-card">
-      <n-data-table :columns="columns" :data="items" :loading="loading" :pagination="pagination" size="small" :scroll-x="700" />
-      <div v-if="!items.length && !loading" class="empty-state">暂无日志</div>
+    </PageHeader>
+    <div class="surface-card card-pad">
+      <n-data-table :columns="columns" :data="items" :loading="loading" :pagination="pagination" :scroll-x="900">
+        <template #empty><EmptyState compact title="暂无日志" /></template>
+      </n-data-table>
     </div>
   </div>
 </template>

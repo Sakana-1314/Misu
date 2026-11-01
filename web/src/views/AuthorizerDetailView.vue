@@ -3,22 +3,27 @@ import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NTag, useDialog, useMessage, type DataTableColumns } from 'naive-ui'
 import {
-  ArrowBackOutline,
-  CameraOutline,
-  CopyOutline,
-  DocumentTextOutline,
-  MoonOutline,
+  AlertCircleOutline,
+  ArrowForwardOutline,
+  CheckmarkCircle,
+  ChevronDownOutline,
+  CloudUploadOutline,
+  DownloadOutline,
+  GlobeOutline,
+  HourglassOutline,
+  PeopleOutline,
   QrCodeOutline,
   RefreshOutline,
+  RocketOutline,
+  TimeOutline,
 } from '@vicons/ionicons5'
-import { api, ApiError } from '@/api/client'
+import { api } from '@/api/client'
 import type {
   AuditRecord,
   Authorizer,
   DomainResponse,
   GrayPlan,
   HistoryVersion,
-  Job,
   LatestAudit,
   Paged,
   ReleaseRecord,
@@ -27,17 +32,20 @@ import type {
 } from '@/types/api'
 import { errorMessage } from '@/utils/error'
 import { downloadBlob } from '@/utils/download'
-import { formatTime, fromUnix } from '@/utils/format'
-import { grayPlanStatusLabels, jobTypeOptions, permissionLabel } from '@/utils/constants'
+import { formatTime, fromUnix, relativeTimeText } from '@/utils/format'
+import { domainFields, grayPlanStatusLabels, permissionLabel } from '@/utils/constants'
+import { actionMenu, useJobCreated } from '@/utils/actions'
 import AppAvatar from '@/components/AppAvatar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import CopyButton from '@/components/CopyButton.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import BatchActionModal from '@/components/BatchActionModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
+const notifyJob = useJobCreated()
 
 const appid = String(route.params.appid || '')
 const authorizer = ref<Authorizer | null>(null)
@@ -100,10 +108,10 @@ const hasCodePermission = computed(() => permissionIds.value.includes(18))
 const active = computed(() => authorizer.value?.status === 'active')
 
 const releaseActionLabels: Record<string, string> = {
-  release: '发布',
+  release: '发布上线',
   rollback: '版本回退',
   gray: '分阶段发布',
-  cancel_gray: '取消',
+  cancel_gray: '停止分阶段',
 }
 
 const auditsPageCount = computed(() => Math.max(1, Math.ceil(auditsTotal.value / 20)))
@@ -169,7 +177,7 @@ async function refreshInfo() {
   refreshing.value = true
   try {
     await api.post(`/apps/${appid}/refresh`)
-    message.success('小程序信息已刷新')
+    message.success('已更新')
     await loadAll()
   } finally {
     refreshing.value = false
@@ -247,13 +255,13 @@ async function loadTesters() {
 
 async function bindTester() {
   if (!testerWechatid.value.trim()) {
-    message.warning('请填写体验者微信号')
+    message.warning('请填写微信号')
     return
   }
   bindingTester.value = true
   try {
     await api.post(`/apps/${appid}/testers`, { wechatid: testerWechatid.value.trim() })
-    message.success('体验者已绑定')
+    message.success('体验成员已添加')
     testerWechatid.value = ''
     await loadTesters()
   } finally {
@@ -261,15 +269,15 @@ async function bindTester() {
   }
 }
 
-function unbindTester(userstr: string) {
+function unbindTester(userstr: string, index: number) {
   dialog.warning({
-    title: '解绑体验者',
-    content: `确定解绑体验者 ${userstr.slice(0, 16)}${userstr.length > 16 ? '…' : ''}？`,
-    positiveText: '解绑',
+    title: '移除体验成员',
+    content: `移除后「成员 ${index + 1}」将无法再打开体验版。`,
+    positiveText: '移除',
     negativeText: '取消',
     onPositiveClick: async () => {
       await api.delete(`/apps/${appid}/testers`, { data: { userstr } })
-      message.success('体验者已解绑')
+      message.success('已移除')
       await loadTesters()
     },
   })
@@ -286,44 +294,140 @@ async function loadHistory() {
   }
 }
 
-async function openAction(type: string, preset = '') {
+function openAction(type: string, preset = '') {
   if (!active.value) {
-    message.warning('该小程序已取消授权，请重新授权后再操作')
+    message.warning('该小程序已取消授权，请重新接入后再操作')
     return
-  }
-  if (type === 'modify_domain' && !domainsLoaded.value) {
-    await loadDomains()
   }
   rollbackPreset.value = preset
   actionType.value = type
   actionShow.value = true
 }
 
-function onJobCreated(job: Job) {
-  message.success(`已提交 ${job.total} 个小程序的任务`)
-  window.setTimeout(() => void loadAll(), 1500)
+function onJobCreated(job: Parameters<typeof notifyJob>[0]) {
+  notifyJob(job)
+  window.setTimeout(() => void loadAll(), 2000)
 }
 
+// ---- release pipeline ----
+
+interface StepAction {
+  label: string
+  action?: string
+  run?: () => void
+}
+
+interface NextStep {
+  tone: 'primary' | 'info' | 'success' | 'error' | 'default'
+  title: string
+  desc: string
+  primary?: StepAction
+  secondary?: StepAction
+}
+
+const expVersion = computed(() => versionInfo.value?.exp_info?.exp_version || '')
+const releaseVersion = computed(() => versionInfo.value?.release_info?.release_version || '')
+
+const nextStep = computed<NextStep>(() => {
+  const audit = latestAudit.value
+  if (!active.value) {
+    return { tone: 'default', title: '小程序已取消授权', desc: '需要管理员重新授权后才能继续管理。' }
+  }
+  if (!hasCodePermission.value) {
+    return { tone: 'error', title: '缺少代码管理权限', desc: '授权时没有勾选「开发管理与数据分析」，无法上传和提审。请让管理员重新授权。' }
+  }
+  if (audit?.status === 2 || audit?.status === 4) {
+    return {
+      tone: 'info',
+      title: `${audit.user_version || '新版本'} 正在审核中`,
+      desc: `提交于 ${relativeTimeText(audit.submit_audit_time * 1000)}。微信审核通常需要 1–3 天，结果出来后会自动更新。`,
+      primary: { label: '刷新审核状态', run: () => void refreshLatestAudit() },
+      secondary: { label: '撤回审核', action: 'undo_audit' },
+    }
+  }
+  if (audit?.status === 0 && audit.user_version && audit.user_version !== releaseVersion.value) {
+    return {
+      tone: 'success',
+      title: `${audit.user_version} 已通过审核`,
+      desc: '发布后所有用户即可使用新版本。也可以先分阶段发布给一部分用户。',
+      primary: { label: '发布上线', action: 'release' },
+      secondary: { label: '分阶段发布', action: 'gray_release' },
+    }
+  }
+  if (audit?.status === 1) {
+    return {
+      tone: 'error',
+      title: `${audit.user_version || '上次提交的版本'} 审核未通过`,
+      desc: audit.reason || '请根据驳回原因修改后重新提交。',
+      primary: { label: '重新提交审核', action: 'submit_audit' },
+      secondary: audit.screenshot ? { label: '查看驳回截图', run: () => void openScreenshot(audit.screenshot) } : { label: '上传新版本', action: 'commit' },
+    }
+  }
+  if (expVersion.value && expVersion.value !== releaseVersion.value && audit?.user_version !== expVersion.value) {
+    return {
+      tone: 'primary',
+      title: `体验版 ${expVersion.value} 可以提交审核了`,
+      desc: '确认体验版运行正常后提交给微信审核，审核通过即可发布。',
+      primary: { label: '提交审核', action: 'submit_audit' },
+      secondary: { label: '上传新版本', action: 'commit' },
+    }
+  }
+  return {
+    tone: 'default',
+    title: releaseVersion.value ? `线上版本 ${releaseVersion.value} 运行中` : '还没有发布过版本',
+    desc: '从代码模板上传新代码，开始下一次发布。',
+    primary: { label: '上传代码', action: 'commit' },
+  }
+})
+
+function runStep(step?: StepAction) {
+  if (!step) return
+  if (step.run) step.run()
+  else if (step.action) openAction(step.action)
+}
+
+const auditStage = computed(() => {
+  const audit = latestAudit.value
+  if (!audit) return { label: '未提交', tone: 'idle' }
+  switch (audit.status) {
+    case 0:
+      return { label: '已通过', tone: 'done' }
+    case 1:
+      return { label: '未通过', tone: 'error' }
+    case 2:
+      return { label: '审核中', tone: 'active' }
+    case 3:
+      return { label: '已撤回', tone: 'idle' }
+    case 4:
+      return { label: '审核延后', tone: 'active' }
+    default:
+      return { label: '—', tone: 'idle' }
+  }
+})
+
+const moreOptions = actionMenu()
+
+// ---- tables ----
+
 const auditColumns = computed<DataTableColumns<AuditRecord>>(() => [
-  { title: '审核单', key: 'audit_id', width: 110, render: (row) => (row.audit_id ? `#${row.audit_id}` : '—') },
-  { title: '版本', key: 'user_version', width: 110, render: (row) => row.user_version || '—' },
-  { title: '状态', key: 'status', width: 104, render: (row) => h(StatusTag, { kind: 'audit', value: row.status }) },
+  { title: '版本', key: 'user_version', width: 110, render: (row) => h('b', row.user_version || '—') },
+  { title: '结果', key: 'status', width: 100, render: (row) => h(StatusTag, { kind: 'audit', value: row.status }) },
   {
-    title: '原因 / 说明',
+    title: '说明',
     key: 'reason',
-    minWidth: 220,
-    render: (row) => h('span', { class: 'cell-muted' }, row.reason || row.user_desc || '—'),
+    minWidth: 240,
+    render: (row) => h('span', { class: row.status === 1 ? 'reject-reason' : 'cell-muted' }, row.reason || row.user_desc || '—'),
   },
-  { title: '提交时间', key: 'submitted_at', width: 170, render: (row) => formatTime(row.submitted_at) },
+  { title: '提交时间', key: 'submitted_at', width: 170, render: (row) => h('span', { class: 'cell-muted' }, formatTime(row.submitted_at)) },
   {
-    title: '操作',
+    title: '',
     key: 'actions',
-    width: 216,
+    width: 150,
     render: (row) =>
       h('div', { class: 'inline-actions' }, [
-        h(NButton, { onClick: () => refreshAudit(row) }, { default: () => '刷新' }),
+        h(NButton, { size: 'small', quaternary: true, onClick: () => refreshAudit(row) }, { default: () => '刷新' }),
         ...(row.screenshot
-          ? [h(NButton, { onClick: () => openScreenshot(row) }, { default: () => '截图' })]
+          ? [h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => openScreenshot(row.screenshot) }, { default: () => '截图' })]
           : []),
       ]),
   },
@@ -333,12 +437,12 @@ const releaseColumns = computed<DataTableColumns<ReleaseRecord>>(() => [
   {
     title: '操作',
     key: 'action',
-    width: 110,
+    width: 120,
     render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => releaseActionLabels[row.action] || row.action }),
   },
-  { title: '版本', key: 'version', width: 140, render: (row) => row.version || '—' },
+  { title: '版本', key: 'version', width: 120, render: (row) => h('b', row.version || '—') },
   { title: '说明', key: 'description', minWidth: 220, render: (row) => h('span', { class: 'cell-muted' }, row.description || '—') },
-  { title: '时间', key: 'released_at', width: 180, render: (row) => formatTime(row.released_at) },
+  { title: '时间', key: 'released_at', width: 180, render: (row) => h('span', { class: 'cell-muted' }, formatTime(row.released_at)) },
 ])
 
 function clearScreenshotUrls() {
@@ -346,12 +450,12 @@ function clearScreenshotUrls() {
   screenshotUrls.value = []
 }
 
-async function openScreenshot(row: AuditRecord) {
+async function openScreenshot(screenshot: string) {
   screenshotShow.value = true
   screenshotLoading.value = true
   screenshotError.value = ''
   clearScreenshotUrls()
-  const ids = (row.screenshot || '').split('|').map((item) => item.trim()).filter(Boolean)
+  const ids = (screenshot || '').split('|').map((item) => item.trim()).filter(Boolean)
   try {
     for (const id of ids) {
       const blob = await api.download(`/apps/${appid}/media`, { params: { media_id: id } })
@@ -366,7 +470,7 @@ async function openScreenshot(row: AuditRecord) {
 
 async function generateQR() {
   if (qrType.value === 'unlimited' && !qrScene.value.trim()) {
-    message.warning('生成不限制数量的小程序码需要填写 scene')
+    message.warning('小程序码需要填写参数')
     return
   }
   qrLoading.value = true
@@ -385,285 +489,322 @@ async function generateQR() {
 }
 
 function downloadQR() {
-  if (qrBlob.value) downloadBlob(qrBlob.value, `misu-qrcode-${appid}.jpg`)
+  if (qrBlob.value) downloadBlob(qrBlob.value, `${authorizer.value?.nick_name || appid}-${qrType.value === 'trial' ? '体验版' : '小程序码'}.jpg`)
 }
 
-const actionOptions = jobTypeOptions.map((item) => ({ label: item.label, key: item.value }))
-
 const domainGroups = computed(() => {
-  const value = domains.value
+  const value = domains.value as Record<string, string[] | null | undefined> | null
   if (!value) return []
-  return [
-    { label: 'request', values: value.requestdomain || [] },
-    { label: 'socket', values: value.wsrequestdomain || [] },
-    { label: 'uploadFile', values: value.uploaddomain || [] },
-    { label: 'downloadFile', values: value.downloaddomain || [] },
-    { label: 'UDP', values: value.udpdomain || [] },
-    { label: 'TCP', values: value.tcpdomain || [] },
-  ]
+  return domainFields.map((field) => ({ label: field.label, api: field.api, values: value[field.key] || [] }))
 })
+
+const configuredDomainCount = computed(() => domainGroups.value.reduce((sum, group) => sum + group.values.length, 0))
 </script>
 
 <template>
   <div>
-    <div v-if="loading && !authorizer" class="surface-card" style="padding: 60px; text-align: center">
+    <div v-if="loading && !authorizer" class="surface-card loading-card">
       <n-spin size="large" />
     </div>
 
-    <div v-else-if="appError" class="surface-card empty-state">
-      <h3>无法加载小程序</h3>
-      <p>{{ appError }}</p>
-      <n-button type="primary" @click="router.push('/authorizers')">返回</n-button>
+    <div v-else-if="appError" class="surface-card">
+      <EmptyState :icon="AlertCircleOutline" title="无法加载小程序" :description="appError">
+        <n-button type="primary" @click="router.push('/authorizers')">返回列表</n-button>
+      </EmptyState>
     </div>
 
     <template v-else-if="authorizer">
-      <div class="detail-hero surface-card">
+      <!-- Hero -->
+      <div class="hero">
         <div class="hero-left">
-          <n-button circle class="icon-button" @click="router.push('/authorizers')">
-            <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-          </n-button>
-          <AppAvatar :src="authorizer.head_img" :name="authorizer.nick_name" :appid="authorizer.appid" :size="64" />
+          <AppAvatar :src="authorizer.head_img" :name="authorizer.nick_name" :appid="authorizer.appid" :size="60" />
           <div class="hero-info">
             <div class="hero-name">{{ authorizer.nick_name || '未命名小程序' }}</div>
-            <div class="hero-id">
+            <div class="hero-meta">
               <span class="mono">{{ authorizer.appid }}</span>
               <CopyButton :text="authorizer.appid" label="复制" />
+              <span class="dot">·</span>
+              <span>{{ authorizer.principal_name || '主体未知' }}</span>
             </div>
             <div class="hero-tags">
               <StatusTag kind="authorizer" :value="authorizer.status" />
               <StatusTag kind="account" :value="authorizer.account_status" />
-              <n-tag size="small" :bordered="false" :type="authorizer.verify_type_id === 0 ? 'primary' : 'default'">
-                {{ authorizer.verify_type_id === 0 ? '微信认证' : '未认证' }}
-              </n-tag>
-              <n-tag size="small" :bordered="false">{{ authorizer.principal_name || '主体未知' }}</n-tag>
-              <n-tag v-if="!hasCodePermission && active" size="small" type="warning" :bordered="false">缺少代码管理权限</n-tag>
+              <n-tag size="small" :bordered="false">{{ authorizer.verify_type_id === 0 ? '已认证' : '未认证' }}</n-tag>
+              <n-tag v-if="visitStatus === 0" size="small" :bordered="false" type="error">已暂停服务</n-tag>
             </div>
           </div>
         </div>
         <div class="hero-actions">
-          <n-button :loading="refreshing" @click="refreshInfo">
-            <template #icon><n-icon><RefreshOutline /></n-icon></template>
-            刷新
-          </n-button>
-          <n-button :disabled="!active" @click="openAction('commit')">上传</n-button>
-          <n-button type="primary" :disabled="!active" @click="openAction('submit_audit')">提审</n-button>
-          <n-dropdown :options="actionOptions" trigger="click" @select="(key: string | number) => openAction(String(key))">
-            <n-button :disabled="!active">更多</n-button>
+          <n-tooltip>
+            <template #trigger>
+              <n-button circle class="icon-button" :loading="refreshing" @click="refreshInfo">
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+              </n-button>
+            </template>
+            从微信重新拉取小程序信息
+          </n-tooltip>
+          <n-dropdown :options="moreOptions" trigger="click" placement="bottom-end" @select="(key: string | number) => openAction(String(key))">
+            <n-button :disabled="!active" icon-placement="right">
+              更多操作
+              <template #icon><n-icon><ChevronDownOutline /></n-icon></template>
+            </n-button>
           </n-dropdown>
         </div>
       </div>
 
-      <n-alert v-if="!active" type="warning" :bordered="false" style="margin: 16px 0">该小程序已取消授权。</n-alert>
-      <n-alert v-else-if="!hasCodePermission" type="warning" :bordered="false" style="margin: 16px 0">缺少代码管理权限，部分操作可能失败。</n-alert>
-
-      <div class="version-grid">
-        <div class="version-card surface-card">
-          <div class="version-head"><span>线上版本</span></div>
-          <div class="version-number">{{ versionInfo?.release_info?.release_version || '—' }}</div>
-          <div class="version-desc">{{ versionInfo?.release_info?.release_desc || '暂无已发布版本' }}</div>
-          <div class="version-time">{{ fromUnix(versionInfo?.release_info?.release_time) }}</div>
-        </div>
-        <div class="version-card surface-card">
-          <div class="version-head"><span>体验版</span></div>
-          <div class="version-number">{{ versionInfo?.exp_info?.exp_version || '—' }}</div>
-          <div class="version-desc">{{ versionInfo?.exp_info?.exp_desc || '暂无体验版' }}</div>
-          <div class="version-time">{{ fromUnix(versionInfo?.exp_info?.exp_time) }}</div>
-        </div>
-        <div class="version-card surface-card">
-          <div class="version-head">
-            <span>最新审核</span>
-            <StatusTag v-if="latestAudit" kind="audit" :value="latestAudit.status" />
+      <!-- Release pipeline -->
+      <div class="surface-card pipeline-card">
+        <div class="pipeline">
+          <div class="stage" :class="expVersion ? 'done' : 'idle'">
+            <div class="stage-icon"><n-icon><CloudUploadOutline /></n-icon></div>
+            <div class="stage-body">
+              <div class="stage-label">体验版</div>
+              <div class="stage-version">{{ expVersion || '—' }}</div>
+              <div class="stage-desc">{{ versionInfo?.exp_info?.exp_desc || (expVersion ? '' : '还没有上传代码') }}</div>
+              <div class="stage-time">{{ versionInfo?.exp_info?.exp_time ? fromUnix(versionInfo.exp_info.exp_time) : '' }}</div>
+            </div>
           </div>
-          <div class="version-number">{{ latestAudit?.user_version || '—' }}</div>
-          <div class="version-desc">{{ latestAudit?.reason || latestAudit?.user_desc || '暂无审核记录' }}</div>
-          <div class="version-time">{{ latestAudit ? `提交于 ${fromUnix(latestAudit.submit_audit_time)}` : '—' }}</div>
+          <n-icon class="stage-arrow"><ArrowForwardOutline /></n-icon>
+          <div class="stage" :class="auditStage.tone">
+            <div class="stage-icon">
+              <n-icon>
+                <HourglassOutline v-if="auditStage.tone === 'active'" />
+                <AlertCircleOutline v-else-if="auditStage.tone === 'error'" />
+                <CheckmarkCircle v-else />
+              </n-icon>
+            </div>
+            <div class="stage-body">
+              <div class="stage-label">微信审核 · <span class="stage-state">{{ auditStage.label }}</span></div>
+              <div class="stage-version">{{ latestAudit?.user_version || '—' }}</div>
+              <div class="stage-desc">{{ latestAudit?.user_desc || (latestAudit ? '' : '还没有提交过审核') }}</div>
+              <div class="stage-time">{{ latestAudit ? fromUnix(latestAudit.submit_audit_time) : '' }}</div>
+            </div>
+          </div>
+          <n-icon class="stage-arrow"><ArrowForwardOutline /></n-icon>
+          <div class="stage" :class="releaseVersion ? 'live' : 'idle'">
+            <div class="stage-icon"><n-icon><RocketOutline /></n-icon></div>
+            <div class="stage-body">
+              <div class="stage-label">线上版本</div>
+              <div class="stage-version">{{ releaseVersion || '—' }}</div>
+              <div class="stage-desc">{{ versionInfo?.release_info?.release_desc || (releaseVersion ? '' : '还没有发布过') }}</div>
+              <div class="stage-time">{{ versionInfo?.release_info?.release_time ? fromUnix(versionInfo.release_info.release_time) : '' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="next-step" :class="nextStep.tone">
+          <div class="next-text">
+            <div class="next-title">{{ nextStep.title }}</div>
+            <div class="next-desc">{{ nextStep.desc }}</div>
+          </div>
+          <div class="next-actions">
+            <n-button v-if="nextStep.secondary" @click="runStep(nextStep.secondary)">{{ nextStep.secondary.label }}</n-button>
+            <n-button v-if="nextStep.primary" type="primary" :loading="refreshing && !nextStep.primary.action" @click="runStep(nextStep.primary)">
+              {{ nextStep.primary.label }}
+            </n-button>
+          </div>
+        </div>
+
+        <div v-if="grayPlan && (grayPlan.status === 1 || grayPlan.status === 2)" class="gray-strip">
+          <div>
+            <b>分阶段发布{{ grayPlanStatusLabels[grayPlan.status] || '' }}</b>
+            <span class="hint">已覆盖 {{ grayPlan.gray_percentage }}% 的用户</span>
+          </div>
+          <n-progress type="line" :percentage="grayPlan.gray_percentage" :show-indicator="false" :height="6" class="gray-bar" />
+          <div class="gray-actions">
+            <n-button size="small" @click="openAction('gray_release')">调整比例</n-button>
+            <n-button size="small" @click="openAction('cancel_gray_release')">停止</n-button>
+          </div>
         </div>
       </div>
 
+      <!-- Tabs -->
       <div class="tab-card surface-card">
         <n-tabs v-model:value="tab" type="line" animated>
-          <n-tab-pane name="overview" tab="概览">
-            <div class="overview">
-              <n-descriptions :column="3" label-placement="top" bordered size="small">
-                <n-descriptions-item label="主体名称">{{ authorizer.principal_name || '—' }}</n-descriptions-item>
-                <n-descriptions-item label="授权时间">{{ formatTime(authorizer.auth_time) }}</n-descriptions-item>
-                <n-descriptions-item label="服务状态">
+          <n-tab-pane name="overview" tab="基本信息">
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">主体</div>
+                <div class="info-value">{{ authorizer.principal_name || '—' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">原始 ID</div>
+                <div class="info-value mono">{{ authorizer.user_name || '—' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">接入时间</div>
+                <div class="info-value">{{ formatTime(authorizer.auth_time) }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">服务状态</div>
+                <div class="info-value">
                   <template v-if="visitStatus !== null">
-                    <n-tag size="small" :bordered="false" :type="visitStatus === 1 ? 'primary' : 'error'">
-                      {{ visitStatus === 1 ? '正常' : '已暂停服务' }}
-                    </n-tag>
+                    <span :class="visitStatus === 1 ? 'ok-text' : 'bad-text'">{{ visitStatus === 1 ? '正常' : '已暂停' }}</span>
+                    <n-button text size="small" type="primary" class="inline-link" :disabled="!active" @click="openAction('set_visit_status')">修改</n-button>
                   </template>
                   <span v-else>—</span>
-                </n-descriptions-item>
-              </n-descriptions>
+                </div>
+              </div>
+            </div>
 
-              <div class="section-block">
-                <div class="row-between">
-                  <div>
-                    <div class="section-title">权限集</div>
+            <div class="two-col">
+              <div class="block">
+                <div class="block-title">服务类目</div>
+                <div v-if="categories?.categories?.length" class="row-list">
+                  <div v-for="(item, index) in categories.categories" :key="index" class="row-item">
+                    <span>{{ item.first_name }} › {{ item.second_name }}</span>
+                    <n-tag size="small" :bordered="false" :type="item.audit_status === 3 ? 'primary' : item.audit_status === 1 ? 'info' : 'error'">
+                      {{ item.audit_status === 3 ? '可用' : item.audit_status === 1 ? '审核中' : '未通过' }}
+                    </n-tag>
                   </div>
                 </div>
+                <div v-else class="hint">还没有配置服务类目。提交审核前需要先在小程序后台「设置 → 服务类目」中添加。</div>
+              </div>
+
+              <div class="block">
+                <div class="block-title">授权的权限</div>
                 <div class="tag-cloud">
                   <n-tag v-for="id in permissionIds" :key="id" size="small" :bordered="false" :type="id === 18 ? 'primary' : 'default'">
                     {{ permissionLabel(id) }}
                   </n-tag>
-                  <span v-if="permissionIds.length === 0" class="cell-muted">暂无权限集信息，请刷新授权信息</span>
+                  <span v-if="permissionIds.length === 0" class="hint">暂无权限信息，点击右上角刷新试试</span>
                 </div>
               </div>
+            </div>
 
-              <div class="section-block">
-                <div class="row-between">
+            <div class="block">
+              <div class="block-head">
+                <div>
+                  <div class="block-title">历史版本</div>
+                  <div class="hint">线上版本出问题时，可以快速回退到之前的版本。</div>
+                </div>
+                <n-button v-if="!historyLoaded" size="small" :loading="historyLoading" @click="loadHistory">查看历史版本</n-button>
+              </div>
+              <div v-if="historyVersions.length" class="row-list">
+                <div v-for="item in historyVersions" :key="item.app_version" class="row-item">
                   <div>
-                    <div class="section-title">已配置类目</div>
+                    <b>{{ item.user_version || item.app_version }}</b>
+                    <span class="hint"> · {{ item.user_desc || '无说明' }} · {{ fromUnix(item.commit_time) }}</span>
                   </div>
-                </div>
-                <div v-if="categories?.categories?.length" class="category-list">
-                  <div v-for="(item, index) in categories.categories" :key="index" class="category-row">
-                    <div>
-                      <div class="category-name">{{ item.first_name }} / {{ item.second_name }}</div>
-                    </div>
-                    <n-tag size="small" :bordered="false" :type="item.audit_status === 3 ? 'primary' : item.audit_status === 1 ? 'info' : 'error'">
-                      {{ item.audit_status === 3 ? '审核通过' : item.audit_status === 1 ? '审核中' : '未通过' }}
-                    </n-tag>
-                  </div>
-                </div>
-                <div v-else class="cell-muted">暂无已配置类目。提审前请先在小程序后台配置类目。</div>
-              </div>
-
-              <div class="two-col">
-                <div class="section-block">
-                  <div class="row-between">
-                    <div>
-                      <div class="section-title">分阶段发布</div>
-                    </div>
-                    <n-button :disabled="!active" @click="openAction('gray_release')">灰度</n-button>
-                  </div>
-                  <div v-if="grayPlan" class="gray-box">
-                    <div class="gray-head">
-                      <n-tag size="small" :bordered="false" :type="grayPlan.status === 1 ? 'info' : 'default'">
-                        {{ grayPlanStatusLabels[grayPlan.status] || `状态 ${grayPlan.status}` }}
-                      </n-tag>
-                      <span class="gray-percent">{{ grayPlan.gray_percentage }}%</span>
-                    </div>
-                    <div class="cell-muted">项目成员优先：{{ grayPlan.support_debuger_first ? '是' : '否' }} · 体验成员优先：{{ grayPlan.support_experiencer_first ? '是' : '否' }}</div>
-                    <n-button v-if="grayPlan.status === 1 || grayPlan.status === 2" style="margin-top: 10px" :disabled="!active" @click="openAction('cancel_gray_release')">取消</n-button>
-                  </div>
-                  <div v-else class="cell-muted">暂无进行中的灰度发布。</div>
-                </div>
-
-                <div class="section-block">
-                  <div class="row-between">
-                    <div>
-                      <div class="section-title">历史版本</div>
-                    </div>
-                    <n-button :loading="historyLoading" @click="loadHistory">加载</n-button>
-                  </div>
-                  <div v-if="historyVersions.length" class="history-list">
-                    <div v-for="item in historyVersions" :key="item.app_version" class="history-row">
-                      <div>
-                        <div class="history-version">{{ item.app_version }}</div>
-                        <div class="cell-muted">{{ item.user_desc || item.user_version || '—' }} · {{ fromUnix(item.commit_time) }}</div>
-                      </div>
-                      <n-button @click="openAction('rollback', item.app_version)">回退</n-button>
-                    </div>
-                  </div>
-                  <div v-else class="cell-muted">{{ historyLoaded ? '暂无' : '—' }}</div>
+                  <n-button size="small" :disabled="!active" @click="openAction('rollback', item.app_version)">回退到此版本</n-button>
                 </div>
               </div>
+              <div v-else-if="historyLoaded" class="hint">没有可回退的版本。</div>
             </div>
           </n-tab-pane>
 
           <n-tab-pane name="audits" tab="审核记录">
             <div class="pane-toolbar">
-              <n-button :loading="refreshing" @click="refreshLatestAudit">刷新</n-button>
+              <span class="hint">每次提交审核的结果。未通过时可查看驳回原因和截图。</span>
+              <n-button size="small" :loading="refreshing" @click="refreshLatestAudit">
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                刷新
+              </n-button>
             </div>
-            <n-data-table :columns="auditColumns" :data="audits" :loading="auditsLoading" :pagination="false" size="small" :scroll-x="1000" />
+            <n-data-table :columns="auditColumns" :data="audits" :loading="auditsLoading" :pagination="false" :scroll-x="860">
+              <template #empty><EmptyState compact :icon="TimeOutline" title="还没有审核记录" /></template>
+            </n-data-table>
             <div v-if="auditsPageCount > 1" class="pager">
               <n-pagination v-model:page="auditsPage" :page-count="auditsPageCount" @update:page="loadAudits" />
             </div>
-            <div v-if="!audits.length && !auditsLoading" class="empty-state">暂无审核记录。</div>
           </n-tab-pane>
 
           <n-tab-pane name="releases" tab="发布记录">
-            <div class="pane-toolbar">
-              <n-button :loading="releasesLoading" @click="loadReleases(releasesPage)">刷新</n-button>
-            </div>
-            <n-data-table :columns="releaseColumns" :data="releases" :loading="releasesLoading" :pagination="false" size="small" :scroll-x="900" />
+            <n-data-table :columns="releaseColumns" :data="releases" :loading="releasesLoading" :pagination="false" :scroll-x="760">
+              <template #empty><EmptyState compact :icon="RocketOutline" title="还没有发布记录" /></template>
+            </n-data-table>
             <div v-if="releasesPageCount > 1" class="pager">
               <n-pagination v-model:page="releasesPage" :page-count="releasesPageCount" @update:page="loadReleases" />
             </div>
-            <div v-if="!releases.length && !releasesLoading" class="empty-state">暂无发布记录。</div>
           </n-tab-pane>
 
           <n-tab-pane name="domains" tab="服务器域名">
             <div class="pane-toolbar">
-              <n-button :loading="domainsLoading" @click="loadDomains">刷新</n-button>
-              <n-button type="primary" :disabled="!active" @click="openAction('modify_domain')">编辑</n-button>
+              <span class="hint">小程序只能访问这里配置过的域名。每月最多修改 50 次。</span>
+              <n-button size="small" type="primary" :disabled="!active" @click="openAction('modify_domain')">修改域名</n-button>
             </div>
-            <n-alert type="warning" :bordered="false" style="margin-bottom: 14px">修改域名每月最多 50 次。</n-alert>
-            <div v-if="domains" class="domain-groups">
-              <div v-for="group in domainGroups" :key="group.label" class="domain-group">
-                <div class="domain-label">{{ group.label }}</div>
-                <div v-if="group.values.length" class="tag-cloud">
-                  <n-tag v-for="value in group.values" :key="value" size="small" :bordered="false" class="mono">{{ value }}</n-tag>
-                </div>
-                <div v-else class="cell-muted">未配置</div>
-              </div>
-              <div v-if="domains.no_icp_domain?.length" class="domain-group">
-                <div class="domain-label error">未备案域名</div>
-                <div class="tag-cloud">
-                  <n-tag v-for="value in domains.no_icp_domain" :key="value" size="small" type="error" :bordered="false" class="mono">{{ value }}</n-tag>
+            <n-spin :show="domainsLoading">
+              <div v-if="domains" class="domain-grid">
+                <div v-for="group in domainGroups" :key="group.api" class="domain-group" :class="{ empty: !group.values.length }">
+                  <div class="domain-label">{{ group.label }} <span class="api-name">{{ group.api }}</span></div>
+                  <div v-if="group.values.length" class="domain-values">
+                    <span v-for="value in group.values" :key="value" class="mono">{{ value }}</span>
+                  </div>
+                  <div v-else class="hint">未配置</div>
                 </div>
               </div>
-            </div>
-            <div v-else-if="!domainsLoading" class="empty-state">无法获取域名列表，请检查权限或稍后重试。</div>
+              <EmptyState v-else-if="!domainsLoading" compact :icon="GlobeOutline" title="无法读取域名" description="请确认已授权相关权限，或稍后重试。" />
+              <n-alert v-if="domains?.no_icp_domain?.length" type="error" :bordered="false" class="icp-alert">
+                以下域名未备案，可能无法访问：{{ domains.no_icp_domain.join('、') }}
+              </n-alert>
+              <div v-if="domains && configuredDomainCount === 0" class="hint" style="margin-top: 10px">还没有配置任何域名。</div>
+            </n-spin>
           </n-tab-pane>
 
-          <n-tab-pane name="testers" tab="体验者">
+          <n-tab-pane name="testers" tab="体验成员">
             <div class="tester-form">
-              <n-input v-model:value="testerWechatid" placeholder="输入体验者微信号" style="max-width: 280px" />
-              <n-button type="primary" :loading="bindingTester" :disabled="!active" @click="bindTester">绑定</n-button>
-              <n-button :loading="testersLoading" @click="loadTesters">刷新</n-button>
+              <n-input v-model:value="testerWechatid" placeholder="输入对方的微信号" class="tester-input" @keyup.enter="bindTester" />
+              <n-button type="primary" :loading="bindingTester" :disabled="!active" @click="bindTester">添加</n-button>
             </div>
-            <div v-if="testers.length" class="tester-list">
-              <div v-for="tester in testers" :key="tester" class="tester-row">
-                <span class="mono">{{ tester }}</span>
-                <n-button :disabled="!active" @click="unbindTester(tester)">解绑</n-button>
+            <div class="hint" style="margin-bottom: 12px">体验成员可以扫描体验版二维码，在正式发布前试用新版本。</div>
+            <n-spin :show="testersLoading">
+              <div v-if="testers.length" class="row-list">
+                <div v-for="(tester, index) in testers" :key="tester" class="row-item">
+                  <div class="tester-name">
+                    <n-icon><PeopleOutline /></n-icon>
+                    成员 {{ index + 1 }}
+                    <span class="hint mono">{{ tester.slice(0, 10) }}…</span>
+                  </div>
+                  <n-button size="small" quaternary :disabled="!active" @click="unbindTester(tester, index)">移除</n-button>
+                </div>
               </div>
-            </div>
-            <div v-else-if="!testersLoading" class="empty-state">暂无已绑定的体验者。</div>
+              <EmptyState v-else-if="!testersLoading" compact :icon="PeopleOutline" title="还没有体验成员" />
+            </n-spin>
           </n-tab-pane>
 
           <n-tab-pane name="qrcode" tab="二维码">
             <div class="qr-layout">
               <div class="qr-form">
-                <n-form label-placement="top">
-                  <n-form-item label="二维码类型">
-                    <n-radio-group v-model:value="qrType">
-                      <n-radio-button value="trial">体验版二维码</n-radio-button>
-                      <n-radio-button value="unlimited">不限制数量小程序码</n-radio-button>
-                    </n-radio-group>
-                  </n-form-item>
-                  <n-form-item label="页面路径">
-                    <n-input v-model:value="qrPath" placeholder="例如 pages/index/index?foo=bar" />
-                  </n-form-item>
-                  <n-form-item v-if="qrType === 'unlimited'" label="scene（必填）">
-                    <n-input v-model:value="qrScene" placeholder="例如 a=1&b=2，最长 32 可见字符" />
-                  </n-form-item>
-                  <n-form-item v-if="qrType === 'unlimited'" label="宽度">
-                    <n-input-number v-model:value="qrWidth" :min="280" :max="1280" style="width: 160px" />
-                  </n-form-item>
-                  <n-button type="primary" :loading="qrLoading" @click="generateQR">生成</n-button>
-                </n-form>
+                <div class="choice-grid">
+                  <button type="button" class="choice" :class="{ selected: qrType === 'trial' }" @click="qrType = 'trial'">
+                    <div class="choice-title">体验版二维码</div>
+                    <div class="choice-desc">给体验成员扫码试用，有效期较短</div>
+                  </button>
+                  <button type="button" class="choice" :class="{ selected: qrType === 'unlimited' }" @click="qrType = 'unlimited'">
+                    <div class="choice-title">小程序码</div>
+                    <div class="choice-desc">打开线上版本，可长期使用，适合印刷推广</div>
+                  </button>
+                </div>
+                <div class="field">
+                  <div class="field-label">打开的页面 <span class="hint">留空则打开首页</span></div>
+                  <n-input v-model:value="qrPath" placeholder="例如 pages/index/index" />
+                </div>
+                <template v-if="qrType === 'unlimited'">
+                  <div class="field">
+                    <div class="field-label">携带参数</div>
+                    <n-input v-model:value="qrScene" placeholder="例如 id=123，最多 32 个字符" maxlength="32" />
+                    <div class="hint" style="margin-top: 6px">小程序可在页面中读取该参数，用于区分来源或打开指定内容。</div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label">尺寸</div>
+                    <n-input-number v-model:value="qrWidth" :min="280" :max="1280" :step="50" style="width: 160px">
+                      <template #suffix>px</template>
+                    </n-input-number>
+                  </div>
+                </template>
+                <n-button type="primary" :loading="qrLoading" @click="generateQR">生成二维码</n-button>
               </div>
               <div class="qr-preview">
                 <div v-if="qrUrl" class="qr-result">
                   <img :src="qrUrl" alt="小程序二维码" class="qr-image" />
-                  <n-button @click="downloadQR">下载</n-button>
+                  <n-button @click="downloadQR">
+                    <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                    下载
+                  </n-button>
                 </div>
                 <div v-else class="qr-empty">
                   <n-icon :size="34"><QrCodeOutline /></n-icon>
-                  <span>暂无二维码</span>
+                  <span>生成后在这里预览</span>
                 </div>
               </div>
             </div>
@@ -682,7 +823,7 @@ const domainGroups = computed(() => {
       @created="onJobCreated"
     />
 
-    <n-modal v-model:show="screenshotShow" preset="card" title="审核失败截图" :style="{ width: 'min(820px, 94vw)' }">
+    <n-modal v-model:show="screenshotShow" preset="card" title="驳回截图" :style="{ width: 'min(820px, 94vw)' }">
       <div v-if="screenshotLoading" style="padding: 30px; text-align: center"><n-spin /></div>
       <n-alert v-else-if="screenshotError" type="error" :bordered="false">{{ screenshotError }}</n-alert>
       <div v-else class="screenshot-grid">
@@ -693,19 +834,25 @@ const domainGroups = computed(() => {
 </template>
 
 <style scoped>
-.detail-hero {
+.loading-card {
+  padding: 80px;
+  text-align: center;
+}
+
+/* ---- hero ---- */
+.hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 16px 18px;
+  margin: 4px 0 16px;
   flex-wrap: wrap;
 }
 
 .hero-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -714,19 +861,23 @@ const domainGroups = computed(() => {
 }
 
 .hero-name {
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-.hero-id {
+.hero-meta {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: var(--text-muted);
-  font-size: 11px;
+  gap: 6px;
   margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
   flex-wrap: wrap;
+}
+
+.dot {
+  color: var(--text-faint);
 }
 
 .hero-tags {
@@ -739,154 +890,281 @@ const domainGroups = computed(() => {
 .hero-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.version-grid {
+/* ---- pipeline ---- */
+.pipeline-card {
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+.pipeline {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: stretch;
   gap: 10px;
-  margin: 12px 0;
 }
 
-.version-card {
-  padding: 13px 15px;
-}
-
-.version-head {
+.stage {
   display: flex;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  min-width: 0;
+}
+
+.stage-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-faint);
+  font-size: 18px;
+}
+
+.stage.done .stage-icon,
+.stage.live .stage-icon {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.stage.active .stage-icon {
+  background: var(--primary);
+  color: #fff;
+}
+
+.stage.error .stage-icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.stage.live {
+  background: var(--primary-faint);
+  box-shadow: inset 0 0 0 1px var(--primary-soft);
+}
+
+.stage-body {
+  min-width: 0;
+}
+
+.stage-label {
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.version-number {
-  margin-top: 8px;
-  font-size: 21px;
-  font-weight: 680;
+.stage.active .stage-state {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.stage.error .stage-state {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.stage-version {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
-.version-desc {
-  margin-top: 4px;
+.stage-desc {
+  margin-top: 2px;
   color: var(--text-muted);
   font-size: 12px;
-  min-height: 18px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.version-time {
-  margin-top: 6px;
-  color: var(--text-muted);
+.stage-time {
+  margin-top: 2px;
+  color: var(--text-faint);
   font-size: 11px;
+  min-height: 15px;
 }
 
-.tab-card {
-  padding: 6px 16px 16px;
+.stage-arrow {
+  align-self: center;
+  color: var(--text-faint);
+  font-size: 16px;
 }
 
-.overview {
-  padding-top: 4px;
-}
-
-.section-block {
-  margin-top: 16px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 650;
-}
-
-
-
-.tag-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.category-list {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.category-row {
+.next-step {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 9px 11px;
-  border-radius: var(--radius-sm);
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--text-faint);
   background: var(--surface-soft);
 }
 
-.category-name {
+.next-step.primary,
+.next-step.info,
+.next-step.success {
+  border-left-color: var(--primary);
+  background: var(--primary-faint);
+}
+
+.next-step.error {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.next-title {
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.next-desc {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.next-step.error .next-desc {
+  color: var(--text);
+}
+
+.next-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.gray-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
   font-size: 13px;
+}
+
+.gray-strip .hint {
+  margin-left: 8px;
+}
+
+.gray-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- tabs ---- */
+.tab-card {
+  padding: 6px 20px 20px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.info-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  min-width: 0;
+}
+
+.info-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.info-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13.5px;
   font-weight: 560;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ok-text {
+  color: var(--primary);
+}
+
+.bad-text {
+  color: var(--danger);
 }
 
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  gap: 0 24px;
 }
 
-.gray-box {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
+.block {
+  margin-top: 22px;
 }
 
-.gray-head {
+.block-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
-.gray-percent {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary);
+.block-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 650;
 }
 
-.history-list {
-  margin-top: 10px;
+.block-head .block-title {
+  margin-bottom: 2px;
+}
+
+.row-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.history-row {
+.row-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-soft);
+  font-size: 13px;
 }
 
-.history-version {
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
-  font-weight: 600;
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .pane-toolbar {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin: 4px 0 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 0 14px;
 }
 
 .pager {
@@ -895,69 +1173,131 @@ const domainGroups = computed(() => {
   margin-top: 14px;
 }
 
-.domain-groups {
+:deep(.reject-reason) {
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.domain-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .domain-group {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-soft);
+  min-width: 0;
 }
 
 .domain-label {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 620;
 }
 
-.domain-label.error {
-  color: #dc2626;
+.api-name {
+  margin-left: 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 400;
+  font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
+}
+
+.domain-values {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.icp-alert {
+  margin-top: 12px;
 }
 
 .tester-form {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 4px 0 16px;
-}
-
-.tester-list {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
+  margin: 6px 0 8px;
 }
 
-.tester-row {
+.tester-input {
+  max-width: 300px;
+}
+
+.tester-name {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 9px 11px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
-  font-size: 12px;
-  word-break: break-all;
+  gap: 8px;
 }
 
 .qr-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 20px;
+  gap: 24px;
   padding: 6px 0;
 }
 
 .qr-form {
-  max-width: 480px;
+  max-width: 520px;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.choice {
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice.selected {
+  border-color: var(--primary);
+  background: var(--primary-faint);
+}
+
+.choice-title {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.choice-desc {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field-label {
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field-label .hint {
+  margin-left: 6px;
+  font-weight: 400;
 }
 
 .qr-preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 240px;
+  min-height: 260px;
   border-radius: var(--radius-md);
   background: var(--surface-soft);
   padding: 16px;
@@ -975,7 +1315,7 @@ const domainGroups = computed(() => {
   height: 220px;
   object-fit: contain;
   background: #fff;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 .qr-empty {
@@ -983,7 +1323,7 @@ const domainGroups = computed(() => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  color: var(--text-muted);
+  color: var(--text-faint);
   font-size: 12px;
 }
 
@@ -999,33 +1339,45 @@ const domainGroups = computed(() => {
 }
 
 @media (max-width: 1100px) {
-  .version-grid {
+  .pipeline {
     grid-template-columns: 1fr;
+  }
+
+  .stage-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+
+  .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .two-col,
-  .domain-groups {
+  .qr-layout {
     grid-template-columns: 1fr;
   }
 
-  .qr-layout {
-    grid-template-columns: 1fr;
+  .domain-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
-  .detail-hero {
-    align-items: flex-start;
+  .next-step {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .hero-actions {
-    width: 100%;
+  .gray-strip {
+    grid-template-columns: 1fr;
   }
 
   .tab-card {
     padding: 6px 12px 16px;
   }
 
+  .domain-grid,
+  .choice-grid,
   .screenshot-grid {
     grid-template-columns: 1fr;
   }

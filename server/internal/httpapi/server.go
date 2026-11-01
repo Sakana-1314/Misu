@@ -120,6 +120,7 @@ func (s *Server) Engine() *gin.Engine {
 		auth.GET("/authorizers", s.listAuthorizers)
 		auth.GET("/mpweb/status", s.mpWebStatus)
 		auth.POST("/mpweb/login", s.mpWebLoginStart)
+		auth.POST("/mpweb/login/cancel", s.mpWebLoginCancel)
 		auth.GET("/mpweb/login/qrcode", s.mpWebLoginQRCode)
 		auth.GET("/mpweb/login/status", s.mpWebLoginStatus)
 		auth.POST("/mpweb/logout", s.mpWebLogout)

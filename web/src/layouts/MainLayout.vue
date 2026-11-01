@@ -34,6 +34,7 @@ const activeKey = computed(() => {
 })
 
 const pageTitle = computed(() => (route.meta.title as string) || '控制台')
+const parentTitle = computed(() => (route.meta.parent as string | undefined) || '')
 const username = computed(() => auth.state.admin?.username || 'admin')
 
 const userOptions: DropdownOption[] = [
@@ -106,7 +107,13 @@ onBeforeUnmount(() => {
               </n-icon>
             </template>
           </n-button>
-          <div class="title">{{ pageTitle }}</div>
+          <div class="crumbs">
+            <template v-if="parentTitle">
+              <a class="crumb-parent" @click="router.push({ name: String(route.meta.parentRoute) })">{{ parentTitle }}</a>
+              <span class="crumb-sep">/</span>
+            </template>
+            <span class="crumb-current">{{ pageTitle }}</span>
+          </div>
         </div>
         <div class="right">
           <n-button circle class="icon-button" :title="themeStore.state.dark ? '切换浅色' : '切换深色'" @click="themeStore.toggle()">
@@ -164,7 +171,7 @@ onBeforeUnmount(() => {
   position: sticky;
   top: 0;
   z-index: 15;
-  height: 54px;
+  height: 52px;
   padding: 0 18px 0 12px;
   display: flex;
   align-items: center;
@@ -181,11 +188,30 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.title {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
   white-space: nowrap;
+}
+
+.crumb-parent {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.crumb-parent:hover {
+  color: var(--primary);
+}
+
+.crumb-sep {
+  color: var(--text-faint);
+}
+
+.crumb-current {
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -234,7 +260,7 @@ onBeforeUnmount(() => {
 }
 
 .content {
-  padding: 16px 18px 24px;
+  padding: 20px 24px 32px;
   flex: 1;
 }
 

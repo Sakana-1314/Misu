@@ -22,7 +22,7 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'dashboard',
         component: () => import('@/views/DashboardView.vue'),
-        meta: { title: '仪表盘' },
+        meta: { title: '概览' },
       },
       {
         path: 'authorizers',
@@ -34,7 +34,7 @@ const routes: RouteRecordRaw[] = [
         path: 'authorizers/:appid',
         name: 'authorizer-detail',
         component: () => import('@/views/AuthorizerDetailView.vue'),
-        meta: { title: '小程序详情' },
+        meta: { title: '小程序详情', parent: '小程序', parentRoute: 'authorizers' },
       },
       {
         path: 'templates',
@@ -43,10 +43,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '代码模板' },
       },
       {
+        path: 'jobs',
+        name: 'jobs',
+        component: () => import('@/views/JobsView.vue'),
+        meta: { title: '任务中心' },
+      },
+      {
         path: 'connect',
         name: 'connect',
         component: () => import('@/views/ConnectView.vue'),
-        meta: { title: '网页版连接' },
+        meta: { title: '公众平台连接' },
       },
       {
         path: 'logs',
