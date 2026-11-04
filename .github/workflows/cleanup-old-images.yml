@@ -1,0 +1,27 @@
+name: 清理旧镜像
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    name: 删除旧镜像包
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除 misu-server 全部版本
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: misu-server
+          package-type: container
+          min-versions-to-keep: 0
+
+      - name: 删除 misu-web 全部版本
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: misu-web
+          package-type: container
+          min-versions-to-keep: 0
