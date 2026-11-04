@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/sakana-1314/misu-server:latest
+    image: ghcr.io/sakana-1314/misu:server
     container_name: misu-server
     restart: unless-stopped
     environment:
@@ -39,7 +39,7 @@ services:
       - 1panel-network
 
   web:
-    image: ghcr.io/sakana-1314/misu-web:latest
+    image: ghcr.io/sakana-1314/misu:web
     container_name: misu-web
     restart: unless-stopped
     depends_on:

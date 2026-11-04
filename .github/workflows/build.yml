@@ -38,13 +38,13 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ steps.owner.outputs.value }}/misu-server
+          images: ghcr.io/${{ steps.owner.outputs.value }}/misu
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+            type=ref,event=branch,prefix=server-
+            type=ref,event=pr,prefix=server-
+            type=sha,prefix=server-
+            type=raw,value=server,enable={{is_default_branch}}
+            type=semver,pattern={{version}},prefix=server-
 
       - name: 构建并推送
         uses: docker/build-push-action@v6
@@ -86,13 +86,13 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ steps.owner.outputs.value }}/misu-web
+          images: ghcr.io/${{ steps.owner.outputs.value }}/misu
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+            type=ref,event=branch,prefix=web-
+            type=ref,event=pr,prefix=web-
+            type=sha,prefix=web-
+            type=raw,value=web,enable={{is_default_branch}}
+            type=semver,pattern={{version}},prefix=web-
 
       - name: 构建并推送
         uses: docker/build-push-action@v6
